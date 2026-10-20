@@ -40,7 +40,7 @@ object CloudRealtimeService {
 
     private val sseClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS) // infinite for SSE stream
+        .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
     private val gson = Gson()
@@ -56,8 +56,7 @@ object CloudRealtimeService {
 
             val usernameKey = user.username.lowercase().trim()
             val userIdJson = gson.toJson(user.userId)
-            val putUsername = putJson("usernames/$usernameKey", userIdJson)
-            putUsername
+            putJson("usernames/$usernameKey", userIdJson)
         } catch (e: Exception) {
             Log.e(TAG, "registerUser failed: ${e.message}", e)
             false
@@ -70,11 +69,7 @@ object CloudRealtimeService {
             val userIdJson = getJson("usernames/$usernameKey") ?: return null
             val userId = gson.fromJson(userIdJson, String::class.java) ?: return null
             val user = searchUserById(userId) ?: return null
-            if (user.passwordHash == passwordHash) {
-                user
-            } else {
-                null
-            }
+            if (user.passwordHash == passwordHash) user else null
         } catch (e: Exception) {
             Log.e(TAG, "loginUser failed: ${e.message}", e)
             null
@@ -105,9 +100,7 @@ object CloudRealtimeService {
 
     suspend fun updateUserStatus(userId: String, status: String) {
         try {
-            val patchObj = JsonObject().apply {
-                addProperty("status", status)
-            }
+            val patchObj = JsonObject().apply { addProperty("status", status) }
             patchJson("users/$userId", patchObj.toString())
         } catch (e: Exception) {
             Log.e(TAG, "updateUserStatus failed: ${e.message}", e)
@@ -152,8 +145,8 @@ object CloudRealtimeService {
             val putMyFriend = putJson("friends/$myUserId/$friendUserId", myFriendJson)
             val putTheirFriend = putJson("friends/$friendUserId/$myUserId", theirFriendJson)
 
-            val delIncoming = deleteJson("friend_requests/$myUserId/$friendUserId")
-            val delSent = deleteJson("sent_requests/$friendUserId/$myUserId")
+            deleteJson("friend_requests/$myUserId/$friendUserId")
+            deleteJson("sent_requests/$friendUserId/$myUserId")
 
             putMyFriend && putTheirFriend
         } catch (e: Exception) {
@@ -209,7 +202,7 @@ object CloudRealtimeService {
         }
     }
 
-    // ---- MESSAGE OPERATIONS ----
+    // ---- MESSAGE OPERATIONS (ANLIK AKIŞ İÇİN GÜNCELLENDİ) ----
 
     suspend fun sendMessage(chatId: String, message: Message): Boolean {
         return try {
@@ -251,9 +244,7 @@ object CloudRealtimeService {
 
     suspend fun answerCall(callId: String) {
         try {
-            val patchObj = JsonObject().apply {
-                addProperty("status", "active")
-            }
+            val patchObj = JsonObject().apply { addProperty("status", "active") }
             patchJson("calls/$callId", patchObj.toString())
         } catch (e: Exception) {
             Log.e(TAG, "answerCall failed: ${e.message}", e)
@@ -262,9 +253,7 @@ object CloudRealtimeService {
 
     suspend fun endCall(callId: String, receiverId: String) {
         try {
-            val patchObj = JsonObject().apply {
-                addProperty("status", "ended")
-            }
+            val patchObj = JsonObject().apply { addProperty("status", "ended") }
             patchJson("calls/$callId", patchObj.toString())
             deleteJson("incoming_calls/$receiverId/$callId")
         } catch (e: Exception) {
@@ -320,7 +309,7 @@ object CloudRealtimeService {
         }
     }
 
-    // ---- SSE LISTENERS ----
+    // ---- SSE LISTENERS (ANLIK MESAJ AKIŞI İÇİN GÜNCELLENDİ) ----
 
     fun listenToPath(path: String, onEvent: (String) -> Unit): Call {
         val url = buildUrl(path)
@@ -375,17 +364,12 @@ object CloudRealtimeService {
                     val obj = dataElement.asJsonObject
                     if (obj.has("callId")) {
                         val session = gson.fromJson(obj, CallSession::class.java)
-                        if (session != null && session.status == "ringing") {
-                            onCall(session)
-                        }
+                        if (session != null && session.status == "ringing") onCall(session)
                     } else {
-                        // Map of call sessions
                         for (entry in obj.entrySet()) {
                             if (entry.value.isJsonObject) {
                                 val session = gson.fromJson(entry.value, CallSession::class.java)
-                                if (session != null && session.status == "ringing") {
-                                    onCall(session)
-                                }
+                                if (session != null && session.status == "ringing") onCall(session)
                             }
                         }
                     }
@@ -406,7 +390,6 @@ object CloudRealtimeService {
                         val message = gson.fromJson(obj, Message::class.java)
                         if (message != null) onMessage(message)
                     } else {
-                        // Map of messages, deliver each
                         for (entry in obj.entrySet()) {
                             if (entry.value.isJsonObject) {
                                 val message = gson.fromJson(entry.value, Message::class.java)
@@ -482,9 +465,7 @@ object CloudRealtimeService {
                 val dataElement = extractFirebaseData(rawData) ?: return@listenToPath
                 if (dataElement.isJsonObject) {
                     val obj = dataElement.asJsonObject
-                    if (obj.has("sdp")) {
-                        onAnswer(obj.get("sdp").asString)
-                    }
+                    if (obj.has("sdp")) onAnswer(obj.get("sdp").asString)
                 } else if (dataElement.isJsonPrimitive) {
                     onAnswer(dataElement.asString)
                 }
@@ -500,9 +481,7 @@ object CloudRealtimeService {
                 val dataElement = extractFirebaseData(rawData) ?: return@listenToPath
                 if (dataElement.isJsonObject) {
                     val obj = dataElement.asJsonObject
-                    if (obj.has("sdp")) {
-                        onOffer(obj.get("sdp").asString)
-                    }
+                    if (obj.has("sdp")) onOffer(obj.get("sdp").asString)
                 } else if (dataElement.isJsonPrimitive) {
                     onOffer(dataElement.asString)
                 }
@@ -544,9 +523,7 @@ object CloudRealtimeService {
                     onStatus(dataElement.asString)
                 } else if (dataElement.isJsonObject) {
                     val obj = dataElement.asJsonObject
-                    if (obj.has("status")) {
-                        onStatus(obj.get("status").asString)
-                    }
+                    if (obj.has("status")) onStatus(obj.get("status").asString)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "listenForCallStatus parse error: ${e.message}")
@@ -619,7 +596,8 @@ object CloudRealtimeService {
                     null
                 }
             }
-        } catch (e: Exception) {
+        }c@Suppress("UNREACHABLE_CODE")
+        catch (e: Exception) {
             Log.e(TAG, "getJson failed for $path: ${e.message}")
             null
         }
