@@ -412,13 +412,6 @@ fun AuthScreen(
                                 isRegistering = true
                                 regErrorMessage = null
                                 try {
-                                    val isAvailable = CloudRealtimeService.checkUsernameAvailable(trimmedUser)
-                                    if (!isAvailable) {
-                                        regErrorMessage = "Bu kullanıcı adı zaten alınmış"
-                                        isRegistering = false
-                                        return@launch
-                                    }
-
                                     val generatedId = "TL-" + (1..6).map {
                                         "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".random()
                                     }.joinToString("")
@@ -440,10 +433,10 @@ fun AuthScreen(
                                         UserPreferences.saveUser(context, newUser)
                                         onNavigateToHome()
                                     } else {
-                                        regErrorMessage = "Kayıt işlemi başarısız. Lütfen internet bağlantınızı kontrol edin."
+                                        regErrorMessage = "Kayıt başarısız: Veritabanı isteği reddetti."
                                     }
                                 } catch (e: Exception) {
-                                    regErrorMessage = "Hata oluştu: ${e.message}"
+                                    regErrorMessage = "Hata detayı: ${e.javaClass.simpleName} - ${e.message}"
                                 } finally {
                                     isRegistering = false
                                 }
