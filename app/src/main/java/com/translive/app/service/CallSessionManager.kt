@@ -101,13 +101,17 @@ class CallSessionManager(private val context: Context) {
         }
         synchronized(sseListeners) { sseListeners.add(iceCall) }
 
-        // 5. Listen for remote SDP answer via SSE
+        // 5. Listen for remote SDP answer via SSE (GÖRÜŞME AKTİFLEŞTİRME TETİKLEYİCİSİ)
         val answerCall = CloudRealtimeService.listenForAnswer(callId) { sdp ->
             Log.i(TAG, "Received remote SDP answer for call $callId")
             val desc = SessionDescription(SessionDescription.Type.ANSWER, sdp)
             engine.setRemoteDescription(desc)
-            _callState.value = _callState.value?.copy(status = "active")
-            startDurationTimer()
+            
+            // ANLIK STATÜ VE SAYAC GÜNCELLEMESİ
+            if (_callState.value?.status != "active") {
+                _callState.value = _callState.value?.copy(status = "active")
+                startDurationTimer()
+            }
         }
         synchronized(sseListeners) { sseListeners.add(answerCall) }
 
@@ -116,7 +120,10 @@ class CallSessionManager(private val context: Context) {
             Log.i(TAG, "Call status updated: $status")
             when (status) {
                 "active" -> {
-                    _callState.value = _callState.value?.copy(status = "active")
+                    if (_callState.value?.status != "active") {
+                        _callState.value = _callState.value?.copy(status = "active")
+                        startDurationTimer()
+                    }
                 }
                 "ended" -> {
                     endCallLocally()
@@ -186,7 +193,7 @@ class CallSessionManager(private val context: Context) {
 
         Log.i(TAG, "Answering call: $callId from ${callSession.callerName}")
 
-        // 1. Notify cloud that call is accepted
+        // 1. Notify cloud that call is accepted and state is active
         CloudRealtimeService.answerCall(callId)
 
         // 2. Initialize WebRTC audio engine
@@ -282,7 +289,7 @@ class CallSessionManager(private val context: Context) {
         }
         synchronized(sseListeners) { sseListeners.add(transcriptCall) }
 
-        // 10. Start duration timer and foreground service
+        // 10. Start duration timer and foreground service immediately upon answering
         startDurationTimer()
         startForegroundService()
     }
