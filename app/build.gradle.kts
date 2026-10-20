@@ -68,7 +68,8 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.google.code.gson:gson:2.10.1")
     
-    implementation("org.webrtc:google-webrtc:1.0.32006")
+    // Doğrudan Maven Central üzerinden hatasız indirilen resmi WebRTC paketi
+    implementation("io.getstream:stream-webrtc-android:1.1.1")
     
     implementation("com.google.mlkit:translate:17.0.2")
     implementation("com.google.mlkit:language-id:17.0.5")
