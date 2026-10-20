@@ -1,14 +1,9 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Material 3 tabanlı ana uygulama teması -->
+    <!-- Base application theme. -->
     <style name="Theme.TransLive" parent="Theme.Material3.Light.NoActionBar">
         <!-- Renk özelleştirmeleri (Intent Alabaster & Amber Orange) -->
         <item name="colorPrimary">#EB7A44</item>
         <item name="colorSecondary">#EB7A44</item>
         <item name="android:windowBackground">#FDF8F3</item>
-    </style>
-
-    <style name="Theme.TransLive.NoActionBar" parent="Theme.TransLive">
-        <item name="windowActionBar">false</item>
-        <item name="windowNoActionBar">true</item>
     </style>
 </resources>
