@@ -94,8 +94,10 @@ class CallSessionManager(private val context: Context) {
         // 4. Listen for remote ICE candidates via SSE
         val iceCall = CloudRealtimeService.listenForIceCandidates(callId) { cand, sdpMid, sdpMLineIndex ->
             Log.d(TAG, "Received remote ICE candidate: $sdpMid")
-            val candidate = IceCandidate(sdpMid, sdpMLineIndex, cand)
-            engine.addIceCandidate(candidate)
+            if (cand.isNotBlank()) {
+                val candidate = IceCandidate(sdpMid, sdpMLineIndex, cand)
+                engine.addIceCandidate(candidate)
+            }
         }
         synchronized(sseListeners) { sseListeners.add(iceCall) }
 
@@ -208,8 +210,10 @@ class CallSessionManager(private val context: Context) {
         // 4. Listen for remote ICE candidates via SSE
         val iceCall = CloudRealtimeService.listenForIceCandidates(callId) { cand, sdpMid, sdpMLineIndex ->
             Log.d(TAG, "Received remote ICE candidate: $sdpMid")
-            val candidate = IceCandidate(sdpMid, sdpMLineIndex, cand)
-            engine.addIceCandidate(candidate)
+            if (cand.isNotBlank()) {
+                val candidate = IceCandidate(sdpMid, sdpMLineIndex, cand)
+                engine.addIceCandidate(candidate)
+            }
         }
         synchronized(sseListeners) { sseListeners.add(iceCall) }
 
@@ -236,7 +240,7 @@ class CallSessionManager(private val context: Context) {
         }
         synchronized(sseListeners) { sseListeners.add(statusCall) }
 
-        // 7. Start VAD chunker and translate into caller's expected language (default to en or user's target)
+        // 7. Start VAD chunker and translate into caller's expected language
         val targetLang = "en"
         val chunker = VadAudioChunker(
             pcmChannel = engine.pcmChannel,
