@@ -8,7 +8,7 @@ object ApiConfig {
     const val TURN_HOST = "free.expressturn.com:3478"
     const val TURN_USERNAME = "000000002107783376"
     const val TURN_PASSWORD = "7sAV+w7hgytSej4wTIQOGYM2z90="
-    const val CLOUD_DB_URL = "https://intent-realtime-global-default-rtdb.firebaseio.com"
+    const val CLOUD_DB_URL = "https://gen-lang-client-0272307927-default-rtdb.firebaseio.com"
 
     val ICE_SERVERS = listOf(
         IceServerConfig("stun:stun.l.google.com:19302"),
