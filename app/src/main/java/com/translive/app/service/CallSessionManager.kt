@@ -3,7 +3,10 @@ package com.translive.app.service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import com.google.gson.Gson
 import com.translive.app.data.audio.VadAudioChunker
 import com.translive.app.data.remote.CloudRealtimeService
@@ -36,6 +39,7 @@ class CallSessionManager(private val context: Context) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val gson = Gson()
+    private val uiHandler = Handler(Looper.getMainLooper())
 
     var audioEngine: SharedAudioCallEngine? = null
         private set
@@ -54,6 +58,12 @@ class CallSessionManager(private val context: Context) {
     private var durationJob: Job? = null
     private val sseListeners = mutableListOf<Call>()
 
+    private fun showToast(msg: String) {
+        uiHandler.post {
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        }
+    }
+
     suspend fun initiateCall(myUser: User, friend: Friend) {
         val callId = UUID.randomUUID().toString()
         val session = CallSession(
@@ -70,16 +80,13 @@ class CallSessionManager(private val context: Context) {
 
         Log.i(TAG, "Initiating call: $callId to ${friend.username} (${friend.userId})")
 
-        // 1. Register call in cloud database
         CloudRealtimeService.initiateCall(session)
 
-        // 2. Initialize WebRTC audio engine
         val engine = SharedAudioCallEngine(context)
         engine.initialize()
         engine.createPeerConnection()
         audioEngine = engine
 
-        // 3. Handle local ICE candidates generated
         engine.onIceCandidateGenerated = { candidate ->
             scope.launch(Dispatchers.IO) {
                 CloudRealtimeService.sendIceCandidate(
@@ -91,9 +98,7 @@ class CallSessionManager(private val context: Context) {
             }
         }
 
-        // 4. Listen for remote ICE candidates via SSE
         val iceCall = CloudRealtimeService.listenForIceCandidates(callId) { cand, sdpMid, sdpMLineIndex ->
-            Log.d(TAG, "Received remote ICE candidate: $sdpMid")
             if (cand.isNotBlank()) {
                 val candidate = IceCandidate(sdpMid, sdpMLineIndex, cand)
                 engine.addIceCandidate(candidate)
@@ -101,13 +106,9 @@ class CallSessionManager(private val context: Context) {
         }
         synchronized(sseListeners) { sseListeners.add(iceCall) }
 
-        // 5. Listen for remote SDP answer via SSE (GÖRÜŞME AKTİFLEŞTİRME TETİKLEYİCİSİ)
         val answerCall = CloudRealtimeService.listenForAnswer(callId) { sdp ->
-            Log.i(TAG, "Received remote SDP answer for call $callId")
             val desc = SessionDescription(SessionDescription.Type.ANSWER, sdp)
             engine.setRemoteDescription(desc)
-            
-            // ANLIK STATÜ VE SAYAC GÜNCELLEMESİ
             if (_callState.value?.status != "active") {
                 _callState.value = _callState.value?.copy(status = "active")
                 startDurationTimer()
@@ -115,9 +116,7 @@ class CallSessionManager(private val context: Context) {
         }
         synchronized(sseListeners) { sseListeners.add(answerCall) }
 
-        // 6. Listen for call status changes via SSE
         val statusCall = CloudRealtimeService.listenForCallStatus(callId) { status ->
-            Log.i(TAG, "Call status updated: $status")
             when (status) {
                 "active" -> {
                     if (_callState.value?.status != "active") {
@@ -132,7 +131,6 @@ class CallSessionManager(private val context: Context) {
         }
         synchronized(sseListeners) { sseListeners.add(statusCall) }
 
-        // 7. Create local SDP offer and send via cloud
         engine.createOffer { offerDesc ->
             engine.setLocalDescription(offerDesc)
             scope.launch(Dispatchers.IO) {
@@ -140,7 +138,6 @@ class CallSessionManager(private val context: Context) {
             }
         }
 
-        // 8. Start VAD chunker and translate into friend's preferred language
         val targetLang = friend.language.ifBlank { "en" }
         val chunker = VadAudioChunker(
             pcmChannel = engine.pcmChannel,
@@ -152,7 +149,6 @@ class CallSessionManager(private val context: Context) {
         vadChunker = chunker
         chunker.start()
 
-        // 9. Collect and distribute local transcripts
         scope.launch {
             chunker.transcriptSegments.collect { segment ->
                 appendTranscript(segment)
@@ -163,7 +159,6 @@ class CallSessionManager(private val context: Context) {
             }
         }
 
-        // 10. Listen for remote transcripts via DataChannel & SSE
         engine.onDataChannelMessage = { json ->
             try {
                 val segment = gson.fromJson(json, CallTranscriptSegment::class.java)
@@ -171,7 +166,7 @@ class CallSessionManager(private val context: Context) {
                     appendTranscript(segment)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error parsing transcript from DataChannel: ${e.message}")
+                Log.e(TAG, "Error parsing transcript: ${e.message}")
             }
         }
 
@@ -182,7 +177,6 @@ class CallSessionManager(private val context: Context) {
         }
         synchronized(sseListeners) { sseListeners.add(transcriptCall) }
 
-        // 11. Start Android foreground service to keep call alive
         startForegroundService()
     }
 
@@ -193,16 +187,25 @@ class CallSessionManager(private val context: Context) {
 
         Log.i(TAG, "Answering call: $callId from ${callSession.callerName}")
 
-        // 1. Notify cloud that call is accepted and state is active
-        CloudRealtimeService.answerCall(callId)
+        // ADIM 1: getUserMedia / WebRTC Engine Başlatma
+        val engine = try {
+            val eng = SharedAudioCallEngine(context)
+            eng.initialize()
+            eng.createPeerConnection()
+            audioEngine = eng
+            showToast("Adım 1 başarılı (getUserMedia/Engine Başlatıldı)")
+            eng
+        } catch (e: Exception) {
+            showToast("Hata Adım 1: ${e.message ?: "Bilinmeyen hata"}")
+            return
+        }
 
-        // 2. Initialize WebRTC audio engine
-        val engine = SharedAudioCallEngine(context)
-        engine.initialize()
-        engine.createPeerConnection()
-        audioEngine = engine
+        try {
+            CloudRealtimeService.answerCall(callId)
+        } catch (e: Exception) {
+            // Non-fatal
+        }
 
-        // 3. Handle local ICE candidate emission
         engine.onIceCandidateGenerated = { candidate ->
             scope.launch(Dispatchers.IO) {
                 CloudRealtimeService.sendIceCandidate(
@@ -214,9 +217,7 @@ class CallSessionManager(private val context: Context) {
             }
         }
 
-        // 4. Listen for remote ICE candidates via SSE
         val iceCall = CloudRealtimeService.listenForIceCandidates(callId) { cand, sdpMid, sdpMLineIndex ->
-            Log.d(TAG, "Received remote ICE candidate: $sdpMid")
             if (cand.isNotBlank()) {
                 val candidate = IceCandidate(sdpMid, sdpMLineIndex, cand)
                 engine.addIceCandidate(candidate)
@@ -224,30 +225,45 @@ class CallSessionManager(private val context: Context) {
         }
         synchronized(sseListeners) { sseListeners.add(iceCall) }
 
-        // 5. Listen for remote SDP offer via SSE
+        // ADIM 2: setRemoteDescription
         val offerCall = CloudRealtimeService.listenForOffer(callId) { sdp ->
-            Log.i(TAG, "Received remote SDP offer for call $callId")
-            val desc = SessionDescription(SessionDescription.Type.OFFER, sdp)
-            engine.setRemoteDescription(desc)
-            engine.createAnswer { answerDesc ->
-                engine.setLocalDescription(answerDesc)
-                scope.launch(Dispatchers.IO) {
-                    CloudRealtimeService.sendAnswer(callId, answerDesc.description)
+            try {
+                val desc = SessionDescription(SessionDescription.Type.OFFER, sdp)
+                engine.setRemoteDescription(desc)
+                showToast("Adım 2 başarılı (setRemoteDescription)")
+
+                // ADIM 3: createAnswer
+                engine.createAnswer { answerDesc ->
+                    try {
+                        engine.setLocalDescription(answerDesc)
+                        showToast("Adım 3 başarılı (createAnswer)")
+
+                        // ADIM 4: answer'ı Firebase'e yazma
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                CloudRealtimeService.sendAnswer(callId, answerDesc.description)
+                                showToast("Adım 4 başarılı (Firebase'e Answer Yazıldı)")
+                            } catch (e: Exception) {
+                                showToast("Hata Adım 4: ${e.message ?: "Firebase yazma hatası"}")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        showToast("Hata Adım 3: ${e.message ?: "createAnswer hatası"}")
+                    }
                 }
+            } catch (e: Exception) {
+                showToast("Hata Adım 2: ${e.message ?: "setRemoteDescription hatası"}")
             }
         }
         synchronized(sseListeners) { sseListeners.add(offerCall) }
 
-        // 6. Listen for call status changes via SSE
         val statusCall = CloudRealtimeService.listenForCallStatus(callId) { status ->
-            Log.i(TAG, "Call status updated: $status")
             if (status == "ended") {
                 endCallLocally()
             }
         }
         synchronized(sseListeners) { sseListeners.add(statusCall) }
 
-        // 7. Start VAD chunker and translate into caller's expected language
         val targetLang = "en"
         val chunker = VadAudioChunker(
             pcmChannel = engine.pcmChannel,
@@ -259,7 +275,6 @@ class CallSessionManager(private val context: Context) {
         vadChunker = chunker
         chunker.start()
 
-        // 8. Collect and distribute local transcripts
         scope.launch {
             chunker.transcriptSegments.collect { segment ->
                 appendTranscript(segment)
@@ -270,7 +285,6 @@ class CallSessionManager(private val context: Context) {
             }
         }
 
-        // 9. Listen for remote transcripts via DataChannel & SSE
         engine.onDataChannelMessage = { json ->
             try {
                 val segment = gson.fromJson(json, CallTranscriptSegment::class.java)
@@ -278,7 +292,7 @@ class CallSessionManager(private val context: Context) {
                     appendTranscript(segment)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error parsing transcript from DataChannel: ${e.message}")
+                Log.e(TAG, "Error parsing transcript: ${e.message}")
             }
         }
 
@@ -289,7 +303,6 @@ class CallSessionManager(private val context: Context) {
         }
         synchronized(sseListeners) { sseListeners.add(transcriptCall) }
 
-        // 10. Start duration timer and foreground service immediately upon answering
         startDurationTimer()
         startForegroundService()
     }
@@ -305,7 +318,6 @@ class CallSessionManager(private val context: Context) {
     }
 
     private fun endCallLocally() {
-        Log.i(TAG, "Ending call session locally")
         durationJob?.cancel()
         durationJob = null
         _callDuration.value = 0L
