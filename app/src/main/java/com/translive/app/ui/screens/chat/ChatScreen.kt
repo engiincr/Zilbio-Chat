@@ -33,14 +33,11 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -144,7 +141,6 @@ fun ChatScreen(
     LaunchedEffect(friendId, myUserId) {
         if (friendId.isNotEmpty() && myUserId.isNotEmpty()) {
             try {
-                // Try from friends list first
                 val myFriends = CloudRealtimeService.getFriends(myUserId)
                 val foundFriend = myFriends.find { it.userId == friendId }
                 if (foundFriend != null) {
@@ -163,7 +159,6 @@ fun ChatScreen(
                     }
                 }
 
-                // Load initial messages
                 val initialMessages = CloudRealtimeService.getMessages(chatId)
                 messages.clear()
                 messages.addAll(initialMessages)
@@ -173,7 +168,7 @@ fun ChatScreen(
         }
     }
 
-    // 2. Listen for incoming messages via SSE
+    // 2. Listen for incoming messages via SSE (Anlık Akış)
     DisposableEffect(chatId) {
         var messageCall: Call? = null
         if (chatId.isNotEmpty()) {
@@ -182,7 +177,9 @@ fun ChatScreen(
                     val exists = messages.any { it.messageId == newMessage.messageId }
                     if (!exists) {
                         messages.add(newMessage)
-                        listState.animateScrollToItem(messages.size - 1)
+                        if (messages.isNotEmpty()) {
+                            listState.animateScrollToItem(messages.size - 1)
+                        }
                     }
                 }
             }
@@ -375,17 +372,26 @@ fun ChatScreen(
                                         coroutineScope.launch {
                                             isTranscribingVoice = true
                                             try {
-                                                val targetLang = friendUser?.language ?: "en"
+                                                val srcLang = currentUser?.language?.ifBlank { "tr" } ?: "tr"
+                                                val targetLang = friendUser?.language?.ifBlank { "en" } ?: "en"
+
+                                                // OPTİMİZASYON: Aynı dilde ise sesli not çevirisi yapılmaz
                                                 val transResult = VoiceNoteManager.transcribeAndTranslate(audioFile, targetLang)
                                                 if (transResult != null) {
+                                                    val finalTranslated = if (srcLang.equals(targetLang, ignoreCase = true)) {
+                                                        transResult.originalText
+                                                    } else {
+                                                        transResult.translatedText
+                                                    }
+
                                                     val newMsg = Message(
                                                         messageId = UUID.randomUUID().toString(),
                                                         senderId = myUserId,
                                                         receiverId = friendId,
                                                         chatId = chatId,
                                                         originalText = transResult.originalText,
-                                                        translatedText = transResult.translatedText,
-                                                        originalLanguage = transResult.sourceLanguage,
+                                                        translatedText = finalTranslated,
+                                                        originalLanguage = srcLang,
                                                         timestamp = System.currentTimeMillis(),
                                                         isRead = false,
                                                         type = "voice"
@@ -437,17 +443,25 @@ fun ChatScreen(
                                     coroutineScope.launch {
                                         isTranscribingVoice = true
                                         try {
-                                            val targetLang = friendUser?.language ?: "en"
+                                            val srcLang = currentUser?.language?.ifBlank { "tr" } ?: "tr"
+                                            val targetLang = friendUser?.language?.ifBlank { "en" } ?: "en"
+
                                             val transResult = VoiceNoteManager.transcribeAndTranslate(audioFile, targetLang)
                                             if (transResult != null) {
+                                                val finalTranslated = if (srcLang.equals(targetLang, ignoreCase = true)) {
+                                                    transResult.originalText
+                                                } else {
+                                                    transResult.translatedText
+                                                }
+
                                                 val newMsg = Message(
                                                     messageId = UUID.randomUUID().toString(),
                                                     senderId = myUserId,
                                                     receiverId = friendId,
                                                     chatId = chatId,
                                                     originalText = transResult.originalText,
-                                                    translatedText = transResult.translatedText,
-                                                    originalLanguage = transResult.sourceLanguage,
+                                                    translatedText = finalTranslated,
+                                                    originalLanguage = srcLang,
                                                     timestamp = System.currentTimeMillis(),
                                                     isRead = false,
                                                     type = "voice"
@@ -672,7 +686,6 @@ private fun MessageBubble(
                     }
                 }
 
-                // CRITICAL REQUIREMENT: ONLY show translatedText in the bubble!
                 Text(
                     text = message.translatedText.ifEmpty { message.originalText },
                     fontSize = 15.sp,
@@ -684,7 +697,6 @@ private fun MessageBubble(
 
         Spacer(modifier = Modifier.height(2.dp))
 
-        // Timestamp
         val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestamp))
         Text(
             text = timeStr,
@@ -714,6 +726,8 @@ private fun sendMessage(
             val srcLang = currentUser.language.ifBlank { "tr" }
             val targetLang = friendUser?.language?.ifBlank { "en" } ?: "en"
 
+            // AKILLI OPTİMİZASYON: Eğer iki tarafın da dili aynı ise (örn: ikisi de tr)
+            // Yapay zeka çevirisi yapılmaz, doğrudan orijinal metin gönderilir (Maliyet ve Hız tasarrufu)
             val translatedText = if (srcLang.equals(targetLang, ignoreCase = true)) {
                 clean
             } else {
