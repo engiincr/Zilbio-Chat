@@ -48,6 +48,12 @@ android {
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    
+    // Firebase BoM (Tüm Firebase kütüphanelerinin sürümlerini birbirleriyle uyumlu yönetir)
+    implementation(platform("com.google.firebase:firebase-bom:32.8.0"))
+    // Firebase Cloud Messaging (Arka plan bildirimleri için)
+    implementation("com.google.firebase:firebase-messaging-ktx")
+
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
