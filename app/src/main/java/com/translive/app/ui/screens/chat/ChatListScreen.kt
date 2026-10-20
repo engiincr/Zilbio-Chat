@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -68,6 +69,8 @@ import com.translive.app.ui.theme.OutgoingBubblePeach
 import com.translive.app.ui.theme.SurfaceCardWhite
 import com.translive.app.ui.theme.TextPrimaryEspresso
 import com.translive.app.ui.theme.TextSecondaryWarmGrey
+import kotlinx.coroutines.launch
+import okhttp3.Call
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -82,22 +85,24 @@ fun ChatListScreen(
 ) {
     val context = LocalContext.current
     val currentUser by UserPreferences.getUser(context).collectAsState(initial = null)
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
     var friendsList by remember { mutableStateOf<List<Friend>>(emptyList()) }
     val lastMessages = remember { mutableStateMapOf<String, Message>() }
     var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(currentUser?.userId) {
-        val uid = currentUser?.userId
-        if (!uid.isNullOrEmpty()) {
+    val myUserId = currentUser?.userId ?: ""
+
+    // 1. Arkadaşları ve son mesajları yükle
+    LaunchedEffect(myUserId) {
+        if (myUserId.isNotEmpty()) {
             isLoading = true
             try {
-                val friends = CloudRealtimeService.getFriends(uid)
+                val friends = CloudRealtimeService.getFriends(myUserId)
                 friendsList = friends
 
-                // Fetch last message for each friend's chat
                 friends.forEach { friend ->
-                    val chatId = CloudRealtimeService.generateChatId(uid, friend.userId)
+                    val chatId = CloudRealtimeService.generateChatId(myUserId, friend.userId)
                     val messages = CloudRealtimeService.getMessages(chatId)
                     val last = messages.lastOrNull()
                     if (last != null) {
@@ -105,10 +110,29 @@ fun ChatListScreen(
                     }
                 }
             } catch (e: Exception) {
-                // Keep current state
+                // Ignore
             } finally {
                 isLoading = false
             }
+        }
+    }
+
+    // 2. ANLIK AKIŞ: Sohbetler listesindeyken tüm arkadaşların mesajlarını dinle
+    DisposableEffect(myUserId, friendsList) {
+        val calls = mutableListOf<Call>()
+        if (myUserId.isNotEmpty() && friendsList.isNotEmpty()) {
+            friendsList.forEach { friend ->
+                val chatId = CloudRealtimeService.generateChatId(myUserId, friend.userId)
+                val call = CloudRealtimeService.listenForMessages(chatId) { newMessage ->
+                    coroutineScope.launch {
+                        lastMessages[friend.userId] = newMessage
+                    }
+                }
+                calls.add(call)
+            }
+        }
+        onDispose {
+            calls.forEach { it.cancel() }
         }
     }
 
@@ -152,7 +176,6 @@ fun ChatListScreen(
                     CircularProgressIndicator(color = AccentAmberOrange, strokeWidth = 2.dp)
                 }
             } else if (friendsList.isEmpty()) {
-                // Empty state
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -226,7 +249,7 @@ fun ChatListScreen(
                 ) {
                     items(friendsList, key = { it.userId }) { friend ->
                         val lastMsg = lastMessages[friend.userId]
-                        val isUnread = lastMsg != null && !lastMsg.isRead && lastMsg.senderId != currentUser?.userId
+                        val isUnread = lastMsg != null && !lastMsg.isRead && lastMsg.senderId != myUserId
 
                         Card(
                             modifier = Modifier
@@ -243,7 +266,6 @@ fun ChatListScreen(
                                     .padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Avatar with status dot
                                 Box(contentAlignment = Alignment.BottomEnd) {
                                     AvatarInitials(name = friend.displayName, size = 48)
                                     Box(
