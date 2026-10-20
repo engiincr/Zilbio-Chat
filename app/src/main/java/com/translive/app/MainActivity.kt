@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +45,7 @@ import com.translive.app.ui.theme.TransLiveTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import okhttp3.Call
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "translive_prefs")
 
@@ -54,7 +56,6 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        // Handle runtime permission results gracefully
         val recordAudioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
         val cameraGranted = permissions[Manifest.permission.CAMERA] ?: false
         val notificationsGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -67,7 +68,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Enable edge-to-edge
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
@@ -76,8 +76,26 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 val navController = rememberNavController()
 
-                // Check login state from DataStore
                 var isLoggedIn by remember { mutableStateOf<Boolean?>(null) }
+                val myUserId = currentUserId
+
+                // GLOBAL ARAMA DİNLEYİCİSİ: Uygulamanın neresinde olunursa olunsun gelen aramayı yakalar
+                DisposableEffect(myUserId) {
+                    var callListener: Call? = null
+                    if (!myUserId.isNullOrEmpty()) {
+                        callListener = CloudRealtimeService.listenForIncomingCalls(myUserId) { incomingCall ->
+                            // Biri aradığında doğrudan gelen arama ekranına yönlendir
+                            try {
+                                navController.navigate("incomingCall/${incomingCall.callId}/${incomingCall.callerId}")
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
+                    }
+                    onDispose {
+                        callListener?.cancel()
+                    }
+                }
 
                 LaunchedEffect(Unit) {
                     try {
@@ -87,7 +105,6 @@ class MainActivity : ComponentActivity() {
                         currentUserId = userId
                         isLoggedIn = loggedIn
 
-                        // Update user online status on start if logged in
                         if (loggedIn && !userId.isNullOrEmpty()) {
                             try {
                                 CloudRealtimeService.updateUserStatus(userId, "online")
@@ -104,10 +121,9 @@ class MainActivity : ComponentActivity() {
                 val startDestination = when (isLoggedIn) {
                     true -> "home"
                     false -> "auth"
-                    null -> return@TransLiveTheme // Loading state while reading DataStore
+                    null -> return@TransLiveTheme
                 }
 
-                // Determine if bottom bar should show
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
                 val showBottomBar = currentRoute in listOf("home", "chatList", "calls", "friends", "settings")
@@ -134,10 +150,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Request runtime permissions
         requestAppPermissions()
-
-        // Samsung/Xiaomi battery optimization
         requestBatteryExclusion()
     }
 
@@ -170,24 +183,20 @@ class MainActivity : ComponentActivity() {
     private fun requestAppPermissions() {
         val permissionsToRequest = mutableListOf<String>()
 
-        // RECORD_AUDIO is required for voice calls and live speech translation
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
         }
 
-        // CAMERA for profile photos and video capabilities
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             permissionsToRequest.add(Manifest.permission.CAMERA)
         }
 
-        // POST_NOTIFICATIONS for Android 13+ (API 33+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
 
-        // BLUETOOTH_CONNECT for Android 12+ (API 31+) for Bluetooth headsets during calls
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 permissionsToRequest.add(Manifest.permission.BLUETOOTH_CONNECT)
@@ -202,7 +211,6 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("BatteryLife")
     private fun requestBatteryExclusion() {
         try {
-            // Standard Android Battery Optimization exemption request
             val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
             if (powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) {
                 try {
@@ -211,7 +219,6 @@ class MainActivity : ComponentActivity() {
                     }
                     startActivity(intent)
                 } catch (e: Exception) {
-                    // Fallback to general battery saver optimization settings
                     try {
                         val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                         startActivity(fallbackIntent)
@@ -221,14 +228,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Manufacturer-specific background autostart handling
             val manufacturer = Build.MANUFACTURER.lowercase()
             when {
-                // Xiaomi, Redmi, POCO (MIUI / HyperOS)
                 manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco") -> {
                     handleXiaomiAutoStart()
                 }
-                // Samsung (One UI)
                 manufacturer.contains("samsung") -> {
                     handleSamsungBattery()
                 }
@@ -258,7 +262,7 @@ class MainActivity : ComponentActivity() {
                     break
                 }
             } catch (e: Exception) {
-                // Try next intent fallback
+                // Fallback
             }
         }
     }
@@ -286,7 +290,7 @@ class MainActivity : ComponentActivity() {
                     break
                 }
             } catch (e: Exception) {
-                // Try next intent fallback
+                // Fallback
             }
         }
     }
