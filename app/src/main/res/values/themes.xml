@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TransLive" parent="Theme.Material3.Light.NoActionBar">
+        <item name="android:statusBarColor">#FDF8F3</item>
+        <item name="android:navigationBarColor">#FAF5F0</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

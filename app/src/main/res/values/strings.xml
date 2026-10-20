@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TransLive</string>
+    <string name="login">Login</string>
+    <string name="register">Register</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="display_name">Display Name</string>
+    <string name="select_language">Select Language</string>
+    <string name="chats">Chats</string>
+    <string name="friends">Friends</string>
+    <string name="calls">Calls</string>
+    <string name="settings">Settings</string>
+    <string name="search">Search</string>
+    <string name="type_message">Type a message…</string>
+    <string name="send">Send</string>
+    <string name="call">Call</string>
+    <string name="end_call">End Call</string>
+    <string name="accept">Accept</string>
+    <string name="decline">Decline</string>
+    <string name="mute">Mute</string>
+    <string name="unmute">Unmute</string>
+    <string name="speaker">Speaker</string>
+    <string name="live_translation">Live Translation</string>
+    <string name="original_speech">Original</string>
+    <string name="translated_speech">Translation</string>
+    <string name="add_friend">Add Friend</string>
+    <string name="friend_requests">Friend Requests</string>
+    <string name="online">Online</string>
+    <string name="offline">Offline</string>
+    <string name="logout">Log Out</string>
+    <string name="profile">Profile</string>
+    <string name="language_turkish">Turkish</string>
+    <string name="language_english">English</string>
+    <string name="language_german">German</string>
+    <string name="call_service_notification_title">TransLive Active Call</string>
+    <string name="call_service_notification_desc">Live audio call with real-time translation is active</string>
+    <string name="permission_mic_required">Microphone permission is required for live voice calls and speech translation.</string>
+</resources>

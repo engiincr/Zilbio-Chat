@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background_alabaster_cream">#FDF8F3</color>
+    <color name="surface_card_white">#FFFFFF</color>
+    <color name="border_warm_subtle">#F0E7DD</color>
+    <color name="outgoing_bubble_peach">#FCE8DC</color>
+    <color name="accent_amber_orange">#EB7A44</color>
+    <color name="original_speech_grey">#6E7175</color>
+    <color name="translated_speech_orange">#EB7A44</color>
+    <color name="text_primary_espresso">#2B120C</color>
+    <color name="text_secondary_warm_grey">#7A6F68</color>
+    <color name="online_status_green">#2ECC71</color>
+    <color name="call_end_coral_red">#F26B5E</color>
+    <color name="input_field_background">#F5EDE6</color>
+    <color name="bottom_nav_background">#FAF5F0</color>
+    <color name="call_accept_green">#2ECC71</color>
+    <color name="quota_warning_amber">#FFB020</color>
+</resources>
