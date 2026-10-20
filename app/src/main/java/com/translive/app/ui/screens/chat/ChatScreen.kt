@@ -119,14 +119,11 @@ fun ChatScreen(
     var inputText by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
 
-    // Quota warning banner
     var quotaWarningText by remember { mutableStateOf<String?>(null) }
     var showQuotaBanner by remember { mutableStateOf(false) }
 
-    // Dialog for displaying original text on long press
     var originalTextToInspect by remember { mutableStateOf<Message?>(null) }
 
-    // Voice recording state
     val isRecordingVoice by VoiceNoteManager.isRecording.collectAsState()
     var isTranscribingVoice by remember { mutableStateOf(false) }
 
@@ -137,7 +134,6 @@ fun ChatScreen(
         } else ""
     }
 
-    // 1. Fetch friend details and initial messages
     LaunchedEffect(friendId, myUserId) {
         if (friendId.isNotEmpty() && myUserId.isNotEmpty()) {
             try {
@@ -163,12 +159,12 @@ fun ChatScreen(
                 messages.clear()
                 messages.addAll(initialMessages)
             } catch (e: Exception) {
-                // Keep loaded state
+                // Ignore
             }
         }
     }
 
-    // 2. Listen for incoming messages via SSE (Anlık Akış)
+    // ANLIK AKIŞ: SSE dinleyicisi ile gelen mesajlar ekrana anında yansır
     DisposableEffect(chatId) {
         var messageCall: Call? = null
         if (chatId.isNotEmpty()) {
@@ -190,7 +186,6 @@ fun ChatScreen(
         }
     }
 
-    // 3. Collect Quota Warning from Gemini Translation Engine
     LaunchedEffect(Unit) {
         GeminiTranslationEngine.quotaWarning.collectLatest { warningMessage ->
             quotaWarningText = warningMessage
@@ -200,7 +195,6 @@ fun ChatScreen(
         }
     }
 
-    // Auto-scroll when messages size changes
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
@@ -268,7 +262,6 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Quota Warning Banner
             AnimatedVisibility(
                 visible = showQuotaBanner,
                 enter = fadeIn(),
@@ -297,7 +290,6 @@ fun ChatScreen(
                 }
             }
 
-            // Message List
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -336,7 +328,6 @@ fun ChatScreen(
                 }
             }
 
-            // Voice Recording In-Progress Banner
             if (isRecordingVoice || isTranscribingVoice) {
                 Surface(
                     color = OutgoingBubblePeach,
@@ -375,7 +366,6 @@ fun ChatScreen(
                                                 val srcLang = currentUser?.language?.ifBlank { "tr" } ?: "tr"
                                                 val targetLang = friendUser?.language?.ifBlank { "en" } ?: "en"
 
-                                                // OPTİMİZASYON: Aynı dilde ise sesli not çevirisi yapılmaz
                                                 val transResult = VoiceNoteManager.transcribeAndTranslate(audioFile, targetLang)
                                                 if (transResult != null) {
                                                     val finalTranslated = if (srcLang.equals(targetLang, ignoreCase = true)) {
@@ -422,7 +412,6 @@ fun ChatScreen(
                 }
             }
 
-            // Input Bar at Bottom
             Surface(
                 color = SurfaceCardWhite,
                 border = BorderStroke(1.dp, BorderWarmSubtle),
@@ -434,7 +423,6 @@ fun ChatScreen(
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Mic button for voice notes
                     IconButton(
                         onClick = {
                             if (isRecordingVoice) {
@@ -495,7 +483,6 @@ fun ChatScreen(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Text Field
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
@@ -530,7 +517,6 @@ fun ChatScreen(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Send Button
                     IconButton(
                         onClick = {
                             sendMessage(
@@ -570,7 +556,6 @@ fun ChatScreen(
         }
     }
 
-    // Dialog showing Original Text on bubble Long-Press
     originalTextToInspect?.let { msg ->
         val srcLang = Language.fromCode(msg.originalLanguage)
         AlertDialog(
@@ -726,8 +711,7 @@ private fun sendMessage(
             val srcLang = currentUser.language.ifBlank { "tr" }
             val targetLang = friendUser?.language?.ifBlank { "en" } ?: "en"
 
-            // AKILLI OPTİMİZASYON: Eğer iki tarafın da dili aynı ise (örn: ikisi de tr)
-            // Yapay zeka çevirisi yapılmaz, doğrudan orijinal metin gönderilir (Maliyet ve Hız tasarrufu)
+            // AYNI DİL OPTİMİZASYONU: Aynı dilde iseler AI çalışmaz, maliyet sıfırlanır
             val translatedText = if (srcLang.equals(targetLang, ignoreCase = true)) {
                 clean
             } else {
