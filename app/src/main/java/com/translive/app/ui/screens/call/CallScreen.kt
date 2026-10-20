@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.translive.app.data.local.UserPreferences
 import com.translive.app.data.remote.CloudRealtimeService
+import com.translive.app.domain.model.CallSession
 import com.translive.app.domain.model.CallTranscriptSegment
 import com.translive.app.domain.model.Friend
 import com.translive.app.domain.model.Language
@@ -82,6 +83,7 @@ import java.util.Locale
 fun CallScreen(
     navController: NavController? = null,
     friendId: String,
+    incomingSession: CallSession? = null,
     onNavigateBack: () -> Unit = { navController?.popBackStack() }
 ) {
     val context = LocalContext.current
@@ -100,12 +102,11 @@ fun CallScreen(
     var isMuted by remember { mutableStateOf(false) }
     var isSpeakerOn by remember { mutableStateOf(true) }
 
-    // 1. Fetch friend details and initiate call
+    // 1. Fetch friend details and either initiate or answer call properly
     LaunchedEffect(currentUser?.userId, friendId) {
         val user = currentUser
         if (user != null && friendId.isNotEmpty()) {
             try {
-                // Try from local friends list first
                 val myFriends = CloudRealtimeService.getFriends(user.userId)
                 var friend = myFriends.find { it.userId == friendId }
                 if (friend == null) {
@@ -124,7 +125,13 @@ fun CallScreen(
 
                 if (friend != null) {
                     friendUser = friend
-                    callSessionManager.initiateCall(user, friend)
+                    if (incomingSession != null) {
+                        // Eğer gelen bir arama oturumu varsa doğrudan cevapla
+                        callSessionManager.answerCall(incomingSession, user)
+                    } else {
+                        // Yoksa yeni arama başlat
+                        callSessionManager.initiateCall(user, friend)
+                    }
                 }
             } catch (e: Exception) {
                 // Fallback gracefully
@@ -141,7 +148,7 @@ fun CallScreen(
             } else if (callSessionState?.status == "active") {
                 vadStatus = "Konuşma bekleniyor..."
             } else {
-                vadStatus = "Aranıyor..."
+                vadStatus = "Bağlanıyor..."
             }
             kotlinx.coroutines.delay(400L)
         }
@@ -161,7 +168,6 @@ fun CallScreen(
         }
     }
 
-    // Format duration MM:SS
     val formattedDuration = String.format(
         Locale.getDefault(),
         "%02d:%02d",
@@ -176,7 +182,6 @@ fun CallScreen(
             .padding(vertical = 16.dp, horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Top Section: Friend Info & Duration
         Spacer(modifier = Modifier.height(16.dp))
 
         Box(
@@ -193,7 +198,7 @@ fun CallScreen(
         Spacer(modifier = Modifier.height(10.dp))
 
         Text(
-            text = friendUser?.displayName ?: "Aranıyor...",
+            text = friendUser?.displayName ?: "Görüşülüyor...",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = TextPrimaryEspresso
@@ -201,7 +206,6 @@ fun CallScreen(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Timer
         Text(
             text = formattedDuration,
             fontSize = 16.sp,
@@ -211,7 +215,6 @@ fun CallScreen(
 
         Spacer(modifier = Modifier.height(2.dp))
 
-        // VAD / Speech status
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(top = 2.dp)
@@ -220,7 +223,7 @@ fun CallScreen(
                 modifier = Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(if (callSessionState?.status == "active") OnlineStatusGreen else AccentAmberOrange)
+                    .background(if (callSessionState?.status == "active" || callDuration > 0) OnlineStatusGreen else AccentAmberOrange)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
@@ -232,7 +235,6 @@ fun CallScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Middle Section: Live Transcript Cards (Weight 1f)
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -279,7 +281,6 @@ fun CallScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Bottom Controls Row: Mute, Speaker, End Call
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -287,7 +288,6 @@ fun CallScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Mute toggle
             IconButton(
                 onClick = {
                     isMuted = !isMuted
@@ -306,7 +306,6 @@ fun CallScreen(
                 )
             }
 
-            // End call button (Large red circle)
             IconButton(
                 onClick = {
                     callSessionManager.endCall()
@@ -325,7 +324,6 @@ fun CallScreen(
                 )
             }
 
-            // Speaker toggle
             IconButton(
                 onClick = {
                     isSpeakerOn = !isSpeakerOn
@@ -357,6 +355,7 @@ fun CallScreen(
     CallScreen(
         navController = null,
         friendId = friendId,
+        incomingSession = null,
         onNavigateBack = onNavigateBack
     )
 }
@@ -375,7 +374,6 @@ private fun TranscriptCard(segment: CallTranscriptSegment) {
                 .fillMaxWidth()
                 .padding(12.dp)
         ) {
-            // Speaker Name Label
             Text(
                 text = segment.speakerName.ifEmpty { "Konuşmacı" },
                 fontSize = 11.sp,
@@ -385,7 +383,6 @@ private fun TranscriptCard(segment: CallTranscriptSegment) {
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Original Text: OriginalSpeechGrey (#6E7175), 14sp
             Text(
                 text = segment.originalText,
                 fontSize = 14.sp,
@@ -396,7 +393,6 @@ private fun TranscriptCard(segment: CallTranscriptSegment) {
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Translated Text: TranslatedSpeechOrange (#EB7A44), 16sp, SemiBold
             Text(
                 text = segment.translatedText,
                 fontSize = 16.sp,
