@@ -9,6 +9,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -52,6 +54,7 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "tr
 class MainActivity : ComponentActivity() {
 
     private var currentUserId: String? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -79,16 +82,18 @@ class MainActivity : ComponentActivity() {
                 var isLoggedIn by remember { mutableStateOf<Boolean?>(null) }
                 val myUserId = currentUserId
 
-                // GLOBAL ARAMA DİNLEYİCİSİ: Uygulamanın neresinde olunursa olunsun gelen aramayı yakalar
+                // GLOBAL ARAMA DİNLEYİCİSİ (ANA THREAD KORUMALI)
                 DisposableEffect(myUserId) {
                     var callListener: Call? = null
                     if (!myUserId.isNullOrEmpty()) {
                         callListener = CloudRealtimeService.listenForIncomingCalls(myUserId) { incomingCall ->
-                            // Biri aradığında doğrudan gelen arama ekranına yönlendir
-                            try {
-                                navController.navigate("incomingCall/${incomingCall.callId}/${incomingCall.callerId}")
-                            } catch (e: Exception) {
-                                e.printStackTrace()
+                            // Navigasyonu kesinlikle Main Thread üzerinde güvenli çalıştır
+                            mainHandler.post {
+                                try {
+                                    navController.navigate("incomingCall/${incomingCall.callId}/${incomingCall.callerId}")
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
                             }
                         }
                     }
