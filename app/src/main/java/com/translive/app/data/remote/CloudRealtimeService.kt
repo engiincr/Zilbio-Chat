@@ -202,7 +202,7 @@ object CloudRealtimeService {
         }
     }
 
-    // ---- MESSAGE OPERATIONS (ANLIK AKIŞ İÇİN GÜNCELLENDİ) ----
+    // ---- MESSAGE OPERATIONS ----
 
     suspend fun sendMessage(chatId: String, message: Message): Boolean {
         return try {
@@ -309,7 +309,7 @@ object CloudRealtimeService {
         }
     }
 
-    // ---- SSE LISTENERS (ANLIK MESAJ AKIŞI İÇİN GÜNCELLENDİ) ----
+    // ---- SSE LISTENERS ----
 
     fun listenToPath(path: String, onEvent: (String) -> Unit): Call {
         val url = buildUrl(path)
@@ -596,8 +596,7 @@ object CloudRealtimeService {
                     null
                 }
             }
-        }c@Suppress("UNREACHABLE_CODE")
-        catch (e: Exception) {
+        } catch (e: Exception) {
             Log.e(TAG, "getJson failed for $path: ${e.message}")
             null
         }
@@ -612,6 +611,7 @@ object CloudRealtimeService {
             }
         } catch (e: Exception) {
             Log.e(TAG, "deleteJson failed for $path: ${e.message}")
+            // Fallback for fallback catch
             false
         }
     }
