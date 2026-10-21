@@ -132,23 +132,23 @@ jobs:
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Zilbio-v3.0.3-apk
+          name: Zilbio-v3.0.4-apk
           path: release_assets/
           if-no-files-found: error
 
-      - name: Publish Rolling GitHub Release (v3.0.3 & latest)
+      - name: Publish Rolling GitHub Release (v3.0.4 & latest)
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.0.3
-          name: "Zilbio V3.0.3 (Guaranteed Voice & Studio Audio)"
+          tag_name: v3.0.4
+          name: "Zilbio V3.0.4 (Gated Stabilization & Layer 3 Quality)"
           body: |
-            ## Zilbio V3.0.3 — Production Release
+            ## Zilbio V3.0.4 — Production Release
             - **Target:** Production APK
             - **Commit SHA:** `${{ github.sha }}`
-            - **Version:** `3.0.3` (versionCode 4)
+            - **Version:** `3.0.4` (versionCode 5)
             - **Key Upgrades:** Modernized audio routing with API 31+ CommunicationDevice, full AutoMirrored icons, zero warnings, resilient multi-region SSE sync.
-            - **Direct Download:** `https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.3/Zilbio-latest.apk`
+            - **Direct Download:** `https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.4/Zilbio-latest.apk`
           prerelease: false
           draft: false
           files: |
@@ -165,7 +165,7 @@ jobs:
           CLOUD_DB_URL: ${{ secrets.CLOUD_DB_URL }}
         run: |
           SHA=$(cat release_assets/Zilbio-latest.apk.sha256 | awk '{print $1}')
-          JSON_PAYLOAD="{\"versionCode\":4,\"versionName\":\"3.0.3\",\"commitSha\":\"${{ github.sha }}\",\"sha256\":\"$SHA\",\"downloadUrl\":\"https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.3/Zilbio-latest.apk\",\"mandatory\":false,\"updatedAt\":$(date +%s000)}"
+          JSON_PAYLOAD="{\"versionCode\":5,\"versionName\":\"3.0.4\",\"commitSha\":\"${{ github.sha }}\",\"sha256\":\"$SHA\",\"downloadUrl\":\"https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.4/Zilbio-latest.apk\",\"mandatory\":false,\"updatedAt\":$(date +%s000)}"
           curl -s -X PUT -H "Content-Type: application/json" -d "$JSON_PAYLOAD" "${CLOUD_DB_URL}/app_updates/latest.json" || true
           echo "OTA signal dispatched to Firebase"
 

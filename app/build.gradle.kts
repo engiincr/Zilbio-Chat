@@ -24,8 +24,8 @@ android {
         applicationId = "com.android.zilbio"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "3.0.3"
+        versionCode = 5
+        versionName = "3.0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -34,7 +34,7 @@ android {
 
         listOf("CLOUD_DB_URL", "GEMINI_API_KEY", "GEMINI_API_KEY2", "TURN_USERNAME", "TURN_PASSWORD")
             .forEach { buildConfigField("String", it, secret(it).quoted()) }
-        buildConfigField("String", "BUILD_COMMIT_SHA", (System.getenv("GITHUB_SHA") ?: "v3.0.3-release").quoted())
+        buildConfigField("String", "BUILD_COMMIT_SHA", (System.getenv("GITHUB_SHA") ?: "v3.0.4-release").quoted())
     }
 
     signingConfigs {
@@ -194,4 +194,10 @@ dependencies {
 
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }

@@ -231,7 +231,7 @@ object AppUpdateManager {
                 if (resp.isSuccessful) {
                     val raw = resp.body?.string() ?: ""
                     val json = JSONObject(raw)
-                    val tagName = json.optString("tag_name", "v3.0.3")
+                    val tagName = json.optString("tag_name", "v3.0.4")
                     val bodyNotes = json.optString("body", "")
                     val assets = json.optJSONArray("assets")
 
