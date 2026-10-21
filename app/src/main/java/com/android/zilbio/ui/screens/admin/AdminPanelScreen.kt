@@ -99,6 +99,8 @@ fun AdminPanelScreen(
     var usersList by remember { mutableStateOf<List<User>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(true) }
+    var isCheckingAuth by remember { mutableStateOf(true) }
+    var isAuthorized by remember { mutableStateOf(false) }
     var expandedUserId by remember { mutableStateOf<String?>(null) }
 
     fun loadUsers() {
@@ -110,13 +112,38 @@ fun AdminPanelScreen(
     }
 
     LaunchedEffect(currentUser) {
-        if (currentUser?.isOwnerOrAdmin() == true) {
-            loadUsers()
+        val user = currentUser
+        if (user != null) {
+            if (user.isOwnerOrAdmin()) {
+                isAuthorized = true
+                isCheckingAuth = false
+                loadUsers()
+            } else {
+                scope.launch {
+                    val remote = CloudRealtimeService.searchUserById(user.userId)
+                    if (remote?.isOwnerOrAdmin() == true) {
+                        isAuthorized = true
+                        UserPreferences.saveUser(context, remote)
+                        loadUsers()
+                    } else {
+                        isAuthorized = false
+                    }
+                    isCheckingAuth = false
+                }
+            }
         }
     }
 
-    // Access control: Only @tugkancr or admin accounts
-    if (currentUser != null && currentUser?.isOwnerOrAdmin() != true) {
+    if (isCheckingAuth) {
+        Scaffold(containerColor = BackgroundMidnightNavy) { padding ->
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = AccentNeonLime)
+            }
+        }
+        return
+    }
+
+    if (!isAuthorized) {
         Scaffold(
             containerColor = BackgroundMidnightNavy
         ) { padding ->

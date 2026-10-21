@@ -130,9 +130,12 @@ fun SettingsScreen(
     val isDownloading by AppUpdateManager.isDownloading.collectAsState()
     val downloadProgress by AppUpdateManager.downloadProgress.collectAsState()
     val latestManifest by AppUpdateManager.latestManifest.collectAsState()
+    var hasInitialized by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentUser) {
-        currentUser?.let { user ->
+        val user = currentUser ?: return@LaunchedEffect
+        if (!hasInitialized) {
+            hasInitialized = true
             editableDisplayName = user.displayName
             selectedLanguageCode = user.language.ifEmpty { "tr" }
             BadgeRewardManager.init(context, user.userId)
@@ -240,19 +243,19 @@ fun SettingsScreen(
 
                         IconButton(
                             onClick = {
-                                if (editableDisplayName.isNotBlank()) {
-                                    isSavingName = true
-                                    coroutineScope.launch {
-                                        try {
-                                            UserPreferences.updateDisplayName(context, editableDisplayName)
-                                            currentUser?.let { u ->
-                                                val updated = u.copy(displayName = editableDisplayName)
-                                                CloudRealtimeService.registerUser(updated)
-                                            }
-                                            snackbarHostState.showSnackbar(strings.changesSaved)
-                                        } finally {
-                                            isSavingName = false
+                                val trimmedName = editableDisplayName.trim()
+                                isSavingName = true
+                                coroutineScope.launch {
+                                    try {
+                                        UserPreferences.updateDisplayName(context, trimmedName)
+                                        currentUser?.let { u ->
+                                            CloudRealtimeService.updateUserProfile(u.userId, mapOf("displayName" to trimmedName))
                                         }
+                                        snackbarHostState.showSnackbar(strings.changesSaved)
+                                    } catch (e: Exception) {
+                                        snackbarHostState.showSnackbar("Hata: ${e.message}")
+                                    } finally {
+                                        isSavingName = false
                                     }
                                 }
                             },

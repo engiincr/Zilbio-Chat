@@ -34,10 +34,12 @@ object ZilbioNotificationService {
     const val CHANNEL_MESSAGES = "zilbio_messages_channel"
     const val CHANNEL_CALLS = "zilbio_calls_channel"
     const val CHANNEL_UPDATES = "zilbio_updates_channel"
+    const val CHANNEL_FRIEND_REQUESTS = "zilbio_friend_requests_channel"
 
     private const val CALL_NOTIFICATION_ID = 2001
     private const val MESSAGE_BASE_NOTIFICATION_ID = 3000
     private const val UPDATE_NOTIFICATION_ID = 4001
+    private const val FRIEND_REQUEST_BASE_NOTIFICATION_ID = 5000
 
     private var activeRingtone: Ringtone? = null
     private var callTimeoutJob: Job? = null
@@ -92,7 +94,57 @@ object ZilbioNotificationService {
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             notificationManager.createNotificationChannel(updateChannel)
+
+            // Friend Requests Channel
+            val friendRequestChannel = NotificationChannel(
+                CHANNEL_FRIEND_REQUESTS,
+                "Zilbio Arkadaşlık İstekleri",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Gelen arkadaşlık istekleri bildirimleri"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 200, 100, 200)
+                setShowBadge(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            notificationManager.createNotificationChannel(friendRequestChannel)
         }
+    }
+
+    fun showFriendRequestNotification(
+        context: Context,
+        senderId: String,
+        senderUsername: String,
+        senderDisplayName: String
+    ) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        initChannels(context)
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("navigate_to_friends", true)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            senderId.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val displayName = senderDisplayName.ifBlank { "@$senderUsername" }
+        val notification = NotificationCompat.Builder(context, CHANNEL_FRIEND_REQUESTS)
+            .setSmallIcon(R.drawable.ic_notification_zilbio)
+            .setContentTitle("Yeni Arkadaşlık İsteği")
+            .setContentText("$displayName size arkadaşlık isteği gönderdi.")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val notificationId = FRIEND_REQUEST_BASE_NOTIFICATION_ID + (senderId.hashCode() % 1000).let { if (it < 0) -it else it }
+        notificationManager.notify(notificationId, notification)
+        Log.i(TAG, "Friend request notification shown for sender $senderUsername ($senderId)")
     }
 
     fun showUpdateNotification(

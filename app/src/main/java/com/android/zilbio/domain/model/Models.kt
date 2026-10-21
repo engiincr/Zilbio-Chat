@@ -225,3 +225,12 @@ enum class NetworkQuality {
     WEAK,
     CRITICAL
 }
+
+@Immutable
+data class DeviceSession(
+    val sessionId: String = "",
+    val deviceModel: String = "",
+    val osVersion: String = "",
+    val lastActive: Long = 0L,
+    val isCurrent: Boolean = false
+)

@@ -12,6 +12,8 @@ import com.android.zilbio.dataStore
 import com.android.zilbio.domain.model.ChatCustomization
 import com.android.zilbio.domain.model.PrivacySettings
 import com.android.zilbio.domain.model.User
+import com.android.zilbio.domain.model.UserPermissions
+import com.android.zilbio.domain.model.isTugkancr
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
@@ -43,12 +45,19 @@ object UserPreferences {
     // Power & Autostart Onboarding (Item #7)
     val KEY_HAS_SHOWN_POWER_ONBOARDING = booleanPreferencesKey("has_shown_power_onboarding")
 
+    // Role & Permissions
+    val KEY_ROLE = stringPreferencesKey("user_role")
+    val KEY_IS_ADMIN = booleanPreferencesKey("is_admin")
+    val KEY_CAN_EDIT_PROFILE = booleanPreferencesKey("can_edit_profile")
+    val KEY_CAN_CHANGE_USERNAME = booleanPreferencesKey("can_change_username")
+
     // Theme & Customization (Item #9 & #19)
     val KEY_APP_THEME_MODE = stringPreferencesKey("app_theme_mode") // "SYSTEM", "DARK", "LIGHT"
     val KEY_PINNED_CHATS = stringPreferencesKey("pinned_chats") // Comma-separated chatIds
     val KEY_INSTALLED_COMMIT_SHA = stringPreferencesKey("installed_commit_sha")
     val KEY_LAST_UPDATE_CHECK_TIME = longPreferencesKey("last_update_check_time")
     val KEY_LAST_NOTIFIED_VERSION_CODE = intPreferencesKey("last_notified_version_code")
+    val KEY_SEARCH_HISTORY = stringPreferencesKey("search_history_csv")
 
     fun getUser(context: Context): Flow<User?> {
         return context.dataStore.data
@@ -68,12 +77,16 @@ object UserPreferences {
                     val username = prefs[KEY_USERNAME] ?: ""
                     val displayName = prefs[KEY_DISPLAY_NAME] ?: ""
                     val passwordHash = prefs[KEY_PASSWORD_HASH] ?: ""
-                    val language = prefs[KEY_LANGUAGE] ?: "en"
+                    val language = prefs[KEY_LANGUAGE] ?: "tr"
                     val avatarBase64 = prefs[KEY_AVATAR_BASE64]
                     val bio = prefs[KEY_BIO] ?: ""
                     val age = prefs[KEY_AGE] ?: 0
                     val birthDate = prefs[KEY_BIRTH_DATE] ?: ""
                     val profileVisibility = prefs[KEY_PROFILE_VISIBILITY] ?: "EVERYONE"
+                    val role = prefs[KEY_ROLE] ?: if (isTugkancr(username)) "owner" else "user"
+                    val isAdmin = prefs[KEY_IS_ADMIN] ?: (role.lowercase() in listOf("owner", "admin") || isTugkancr(username))
+                    val canEditProfile = prefs[KEY_CAN_EDIT_PROFILE] ?: true
+                    val canChangeUsername = prefs[KEY_CAN_CHANGE_USERNAME] ?: true
 
                     User(
                         userId = userId,
@@ -86,7 +99,13 @@ object UserPreferences {
                         bio = bio,
                         age = age,
                         birthDate = birthDate,
-                        profileVisibility = profileVisibility
+                        profileVisibility = profileVisibility,
+                        role = role,
+                        permissions = UserPermissions(
+                            isAdmin = isAdmin,
+                            canEditProfile = canEditProfile,
+                            canChangeUsername = canChangeUsername
+                        )
                     )
                 }
             }
@@ -108,6 +127,10 @@ object UserPreferences {
             prefs[KEY_AGE] = user.age
             prefs[KEY_BIRTH_DATE] = user.birthDate
             prefs[KEY_PROFILE_VISIBILITY] = user.profileVisibility
+            prefs[KEY_ROLE] = user.role
+            prefs[KEY_IS_ADMIN] = user.permissions.isAdmin || user.role.lowercase() in listOf("owner", "admin") || isTugkancr(user.username)
+            prefs[KEY_CAN_EDIT_PROFILE] = user.permissions.canEditProfile
+            prefs[KEY_CAN_CHANGE_USERNAME] = user.permissions.canChangeUsername
             prefs[KEY_IS_LOGGED_IN] = true
         }
     }
@@ -284,6 +307,46 @@ object UserPreferences {
             prefs[KEY_SILENCE_NON_CONTACTS] = settings.silenceNonContactCalls
             prefs[KEY_SHOW_AGE] = settings.showAge
             prefs[KEY_SENSITIVE_FILTER] = settings.sensitiveContentFilter
+        }
+    }
+
+    fun getSearchHistory(context: Context): Flow<List<String>> {
+        return context.dataStore.data.map { prefs ->
+            val csv = prefs[KEY_SEARCH_HISTORY] ?: ""
+            if (csv.isBlank()) emptyList()
+            else csv.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        }
+    }
+
+    suspend fun addSearchQuery(context: Context, query: String) {
+        val clean = query.trim()
+        if (clean.isBlank()) return
+        context.dataStore.edit { prefs ->
+            val current = (prefs[KEY_SEARCH_HISTORY] ?: "")
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.equals(clean, ignoreCase = true) }
+                .toMutableList()
+            current.add(0, clean)
+            val limited = current.take(15)
+            prefs[KEY_SEARCH_HISTORY] = limited.joinToString(",")
+        }
+    }
+
+    suspend fun removeSearchQuery(context: Context, query: String) {
+        val clean = query.trim()
+        context.dataStore.edit { prefs ->
+            val current = (prefs[KEY_SEARCH_HISTORY] ?: "")
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.equals(clean, ignoreCase = true) }
+            prefs[KEY_SEARCH_HISTORY] = current.joinToString(",")
+        }
+    }
+
+    suspend fun clearSearchHistory(context: Context) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SEARCH_HISTORY] = ""
         }
     }
 

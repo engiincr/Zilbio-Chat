@@ -7,6 +7,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,9 +21,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChatBubbleOutline
@@ -39,6 +43,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -58,6 +63,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -99,6 +105,9 @@ fun ChatListScreen(
     val scope = rememberCoroutineScope()
     val currentUser by UserPreferences.getUser(context).collectAsState(initial = null)
     val pinnedChats by UserPreferences.getPinnedChats(context).collectAsState(initial = emptySet())
+    val searchHistory by UserPreferences.getSearchHistory(context).collectAsState(initial = emptyList())
+    val realtimeFriends by com.android.zilbio.service.GlobalRealtimeSyncManager.friendsFlow.collectAsState()
+    val realtimeLastMessages by com.android.zilbio.service.GlobalRealtimeSyncManager.lastMessagesFlow.collectAsState()
 
     var friendsList by remember { mutableStateOf<List<Friend>>(emptyList()) }
     val lastMessages = remember { mutableStateMapOf<String, Message>() }
@@ -106,22 +115,28 @@ fun ChatListScreen(
 
     val myUserId = currentUser?.userId ?: ""
 
-    // Fetch initial friends & last messages
+    LaunchedEffect(realtimeFriends) {
+        if (realtimeFriends.isNotEmpty() || friendsList.isEmpty()) {
+            friendsList = realtimeFriends
+            isLoading = false
+        }
+    }
+
+    LaunchedEffect(realtimeLastMessages) {
+        realtimeLastMessages.forEach { (_, msg) ->
+            val friendId = if (msg.senderId == myUserId) msg.receiverId else msg.senderId
+            lastMessages[friendId] = msg
+        }
+    }
+
+    // Fetch initial friends & sync cache
     LaunchedEffect(myUserId) {
         if (myUserId.isNotEmpty()) {
-            isLoading = true
+            if (friendsList.isEmpty()) isLoading = true
             try {
                 val friends = CloudRealtimeService.getFriends(myUserId)
                 friendsList = friends
-
-                friends.forEach { friend ->
-                    val chatId = CloudRealtimeService.generateChatId(myUserId, friend.userId)
-                    val messages = CloudRealtimeService.getMessages(chatId)
-                    val last = messages.lastOrNull()
-                    if (last != null) {
-                        lastMessages[friend.userId] = last
-                    }
-                }
+                com.android.zilbio.service.GlobalRealtimeSyncManager.friendsFlow.value = friends
             } catch (e: Exception) {
                 // Keep state
             } finally {
@@ -133,7 +148,7 @@ fun ChatListScreen(
     // Realtime listen for last messages across all chats (Item #12)
     LaunchedEffect(myUserId) {
         if (myUserId.isNotEmpty()) {
-            CloudRealtimeService.listenToLastMessages { chatId, msg ->
+            CloudRealtimeService.listenToLastMessages { _, msg ->
                 val friendId = if (msg.senderId == myUserId) msg.receiverId else msg.senderId
                 lastMessages[friendId] = msg
             }
@@ -181,6 +196,12 @@ fun ChatListScreen(
                             onValueChange = { searchQuery = it },
                             textStyle = androidx.compose.ui.text.TextStyle(color = TextOffWhite, fontSize = 16.sp),
                             modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = {
+                                if (searchQuery.isNotBlank()) {
+                                    scope.launch { UserPreferences.addSearchQuery(context, searchQuery.trim()) }
+                                }
+                            }),
                             decorationBox = { innerTextField ->
                                 if (searchQuery.isEmpty()) {
                                     Text("Sohbet veya mesajlarda ara...", color = TextMutedSlateGrey, fontSize = 15.sp)
@@ -329,6 +350,66 @@ fun ChatListScreen(
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    if (isSearchActive && searchQuery.isBlank() && searchHistory.isNotEmpty()) {
+                        item {
+                            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Son Aramalar",
+                                        color = TextMutedSlateGrey,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Temizle",
+                                        color = AccentNeonLime,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.clickable {
+                                            scope.launch { UserPreferences.clearSearchHistory(context) }
+                                        }
+                                    )
+                                }
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(searchHistory) { item ->
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = SurfaceSlateNavyElevated,
+                                            modifier = Modifier.clickable { searchQuery = item }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(text = item, fontSize = 12.sp, color = TextOffWhite)
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "Sil",
+                                                    tint = TextMutedSlateGrey,
+                                                    modifier = Modifier
+                                                        .size(12.dp)
+                                                        .clickable {
+                                                            scope.launch {
+                                                                UserPreferences.removeSearchQuery(context, item)
+                                                            }
+                                                        }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     items(displayFriends, key = { it.userId }) { friend ->
                         val chatId = CloudRealtimeService.generateChatId(myUserId, friend.userId)
                         val isPinned = pinnedChats.contains(chatId)

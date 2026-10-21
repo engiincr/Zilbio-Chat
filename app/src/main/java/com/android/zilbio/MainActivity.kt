@@ -155,6 +155,11 @@ class MainActivity : ComponentActivity() {
                         navController.navigate("chat/$senderId")
                     }
                 }
+            } else if (intent.getBooleanExtra("navigate_to_friends", false)) {
+                val currentRoute = navController.currentBackStackEntry?.destination?.route ?: ""
+                if (currentRoute != "friends") {
+                    navController.navigate("friends")
+                }
             } else if (intent.getBooleanExtra("navigate_to_settings", false) || intent.hasExtra("update_version_code")) {
                 val currentRoute = navController.currentBackStackEntry?.destination?.route ?: ""
                 if (currentRoute != "settings") {

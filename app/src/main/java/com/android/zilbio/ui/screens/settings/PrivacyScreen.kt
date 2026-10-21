@@ -59,7 +59,9 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.android.zilbio.data.local.UserPreferences
 import com.android.zilbio.data.remote.CloudRealtimeService
+import com.android.zilbio.domain.model.DeviceSession
 import com.android.zilbio.domain.model.PrivacySettings
+import com.android.zilbio.domain.model.User
 import com.android.zilbio.ui.localization.LocalAppStrings
 import com.android.zilbio.ui.theme.AccentWarmPeach
 import com.android.zilbio.ui.theme.BackgroundDarkEspresso
@@ -78,6 +80,7 @@ fun PrivacyScreen(navController: NavController) {
     val strings = LocalAppStrings.current
     val scope = rememberCoroutineScope()
 
+    val currentUser by UserPreferences.getUser(context).collectAsState(initial = null)
     val privacyFlow = remember { UserPreferences.getPrivacySettings(context) }
     val currentPrivacy by privacyFlow.collectAsState(initial = PrivacySettings())
 
@@ -87,6 +90,8 @@ fun PrivacyScreen(navController: NavController) {
     var sensitiveFilter by remember { mutableStateOf(true) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
+    var showActiveSessionsDialog by remember { mutableStateOf(false) }
+    var showBlockedUsersDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentPrivacy) {
         archiveUnknown = currentPrivacy.archiveUnknownChats
@@ -222,7 +227,7 @@ fun PrivacyScreen(navController: NavController) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                Toast.makeText(context, strings.activeLoginsDesc, Toast.LENGTH_SHORT).show()
+                                showActiveSessionsDialog = true
                             },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -252,7 +257,7 @@ fun PrivacyScreen(navController: NavController) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                Toast.makeText(context, strings.blockedAccountsDesc, Toast.LENGTH_SHORT).show()
+                                showBlockedUsersDialog = true
                             },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -377,6 +382,304 @@ fun PrivacyScreen(navController: NavController) {
             }
         )
     }
+
+    if (showActiveSessionsDialog) {
+        ActiveSessionsDialog(
+            currentUserId = currentUser?.userId ?: "",
+            onDismiss = { showActiveSessionsDialog = false }
+        )
+    }
+
+    if (showBlockedUsersDialog) {
+        BlockedUsersDialog(
+            currentUserId = currentUser?.userId ?: "",
+            onDismiss = { showBlockedUsersDialog = false }
+        )
+    }
+}
+
+@Composable
+fun BlockedUsersDialog(
+    currentUserId: String,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isLoading by remember { mutableStateOf(true) }
+    var blockedUsers by remember { mutableStateOf<List<User>>(emptyList()) }
+
+    LaunchedEffect(currentUserId) {
+        if (currentUserId.isNotBlank()) {
+            isLoading = true
+            try {
+                val blockedIds = CloudRealtimeService.getBlockedUsers(currentUserId)
+                val users = mutableListOf<User>()
+                for (id in blockedIds) {
+                    val u = CloudRealtimeService.searchUserById(id)
+                    if (u != null) {
+                        users.add(u)
+                    } else {
+                        users.add(User(userId = id, username = id, displayName = "Kullanıcı ($id)"))
+                    }
+                }
+                blockedUsers = users
+            } catch (e: Exception) {
+                // Ignore load error
+            } finally {
+                isLoading = false
+            }
+        } else {
+            isLoading = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Engellenen Hesaplar", color = TextOffWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        },
+        text = {
+            Box(modifier = Modifier.fillMaxWidth().height(260.dp)) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center).size(36.dp),
+                        color = AccentWarmPeach
+                    )
+                } else if (blockedUsers.isEmpty()) {
+                    Text(
+                        text = "Engellenen kullanıcı bulunmamaktadır.",
+                        color = TextMutedWarmGrey,
+                        fontSize = 14.sp,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        blockedUsers.forEach { user ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(SurfaceDarkWarmElevated, RoundedCornerShape(10.dp))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Block,
+                                    contentDescription = null,
+                                    tint = DestructiveCoralRed,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = user.displayName.ifBlank { "@${user.username}" },
+                                        color = TextOffWhite,
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        text = "@${user.username}",
+                                        color = TextMutedWarmGrey,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                TextButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val success = CloudRealtimeService.unblockUser(currentUserId, user.userId)
+                                            if (success) {
+                                                blockedUsers = blockedUsers.filter { it.userId != user.userId }
+                                                Toast.makeText(context, "Engelleme kaldırıldı", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "İşlem başarısız oldu", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Text("Kaldır", color = AccentWarmPeach, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Kapat", color = TextOffWhite, fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = SurfaceDarkWarm
+    )
+}
+
+@Composable
+fun ActiveSessionsDialog(
+    currentUserId: String,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isLoading by remember { mutableStateOf(true) }
+    var remoteSessions by remember { mutableStateOf<List<DeviceSession>>(emptyList()) }
+
+    LaunchedEffect(currentUserId) {
+        if (currentUserId.isNotBlank()) {
+            isLoading = true
+            try {
+                val currentSessionId = android.provider.Settings.Secure.getString(
+                    context.contentResolver,
+                    android.provider.Settings.Secure.ANDROID_ID
+                ) ?: "session_current"
+                val thisSession = DeviceSession(
+                    sessionId = currentSessionId,
+                    deviceModel = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}",
+                    osVersion = "Android ${android.os.Build.VERSION.RELEASE}",
+                    lastActive = System.currentTimeMillis(),
+                    isCurrent = true
+                )
+                CloudRealtimeService.registerDeviceSession(currentUserId, thisSession)
+                remoteSessions = CloudRealtimeService.getActiveSessions(currentUserId)
+            } catch (e: Exception) {
+                // Ignore load error
+            } finally {
+                isLoading = false
+            }
+        } else {
+            isLoading = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Aktif Cihaz Oturumları", color = TextOffWhite, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        },
+        text = {
+            Box(modifier = Modifier.fillMaxWidth().height(280.dp)) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center).size(36.dp),
+                        color = AccentWarmPeach
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Current Device Card
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = SurfaceDarkWarmElevated),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Devices,
+                                    contentDescription = null,
+                                    tint = AccentWarmPeach,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}",
+                                            color = TextOffWhite,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "• Bu Cihaz",
+                                            color = AccentWarmPeach,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Text(
+                                        text = "Android ${android.os.Build.VERSION.RELEASE} • Çevrimiçi",
+                                        color = TextMutedWarmGrey,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        // Other Sessions
+                        val otherSessions = remoteSessions.filter { !it.isCurrent && it.sessionId.isNotEmpty() }
+                        if (otherSessions.isNotEmpty()) {
+                            Text(
+                                text = "Diğer Oturumlar",
+                                color = TextMutedWarmGrey,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                            otherSessions.forEach { session ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(SurfaceDarkWarmElevated, RoundedCornerShape(10.dp))
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Devices,
+                                        contentDescription = null,
+                                        tint = TextMutedWarmGrey,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = session.deviceModel.ifBlank { "Bilinmeyen Cihaz" },
+                                            color = TextOffWhite,
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 13.sp
+                                        )
+                                        Text(
+                                            text = session.osVersion,
+                                            color = TextMutedWarmGrey,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            scope.launch {
+                                                val success = CloudRealtimeService.revokeSession(currentUserId, session.sessionId)
+                                                if (success) {
+                                                    remoteSessions = remoteSessions.filter { it.sessionId != session.sessionId }
+                                                    Toast.makeText(context, "Oturum sonlandırıldı", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Text("Kapat", color = DestructiveCoralRed, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Kapat", color = TextOffWhite, fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = SurfaceDarkWarm
+    )
 }
 
 @Composable

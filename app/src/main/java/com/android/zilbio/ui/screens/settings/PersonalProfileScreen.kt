@@ -120,9 +120,12 @@ fun PersonalProfileScreen(
     var isSaving by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
+    var hasInitialized by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentUser) {
-        currentUser?.let { user ->
+        val user = currentUser ?: return@LaunchedEffect
+        if (!hasInitialized) {
+            hasInitialized = true
             username = user.username
             displayName = user.displayName
             bio = user.bio

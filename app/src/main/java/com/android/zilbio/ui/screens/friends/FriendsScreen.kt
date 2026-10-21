@@ -109,6 +109,8 @@ fun FriendsScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val currentUser by UserPreferences.getUser(context).collectAsState(initial = null)
+    val realtimeFriends by com.android.zilbio.service.GlobalRealtimeSyncManager.friendsFlow.collectAsState()
+    val realtimeIncoming by com.android.zilbio.service.GlobalRealtimeSyncManager.incomingRequestsFlow.collectAsState()
 
     var selectedTabIndex by remember { mutableIntStateOf(0) } // 0: Arkadaşlar, 1: Gelen İstekler, 2: Gönderilen
     var friendsList by remember { mutableStateOf<List<Friend>>(emptyList()) }
@@ -120,15 +122,28 @@ fun FriendsScreen(
     var selectedFriendForOptions by remember { mutableStateOf<Friend?>(null) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(realtimeFriends) {
+        if (realtimeFriends.isNotEmpty() || friendsList.isEmpty()) {
+            friendsList = realtimeFriends
+        }
+    }
+
+    LaunchedEffect(realtimeIncoming) {
+        incomingList = realtimeIncoming
+    }
+
     val refreshData: () -> Unit = {
         val uid = currentUser?.userId
         if (!uid.isNullOrEmpty()) {
             coroutineScope.launch {
                 isLoading = true
                 try {
-                    friendsList = CloudRealtimeService.getFriends(uid)
-                    com.android.zilbio.service.GlobalRealtimeSyncManager.friendsFlow.value = friendsList
-                    incomingList = CloudRealtimeService.getIncomingRequests(uid)
+                    val freshFriends = CloudRealtimeService.getFriends(uid)
+                    friendsList = freshFriends
+                    com.android.zilbio.service.GlobalRealtimeSyncManager.friendsFlow.value = freshFriends
+                    val freshIncoming = CloudRealtimeService.getIncomingRequests(uid)
+                    incomingList = freshIncoming
+                    com.android.zilbio.service.GlobalRealtimeSyncManager.incomingRequestsFlow.value = freshIncoming
                     sentList = CloudRealtimeService.getSentRequests(uid)
                 } catch (e: Exception) {
                     // Gracefully ignore error and retain last state
