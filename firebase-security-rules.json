@@ -1,0 +1,185 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": true,
+    "users": {
+      "$userId": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.hasChildren(['userId', 'username'])",
+        "userId": { ".validate": "newData.isString()" },
+        "username": { ".validate": "newData.isString()" },
+        "displayName": { ".validate": "newData.isString()" },
+        "passwordHash": { ".validate": "newData.isString()" },
+        "language": { ".validate": "newData.isString()" },
+        "avatarBase64": { ".validate": "newData.isString() || newData.val() == null" },
+        "status": { ".validate": "newData.isString()" },
+        "lastSeen": { ".validate": "newData.isNumber()" },
+        "bio": { ".validate": "newData.isString()" },
+        "age": { ".validate": "newData.isNumber()" },
+        "birthDate": { ".validate": "newData.isString()" },
+        "profileVisibility": { ".validate": "newData.isString()" },
+        "role": { ".validate": "newData.isString()" },
+        "permissions": {
+          "isAdmin": { ".validate": "newData.isBoolean()" },
+          "canEditProfile": { ".validate": "newData.isBoolean()" },
+          "canChangeUsername": { ".validate": "newData.isBoolean()" },
+          "canSendMessages": { ".validate": "newData.isBoolean()" },
+          "canSendMedia": { ".validate": "newData.isBoolean()" },
+          "canStartCalls": { ".validate": "newData.isBoolean()" },
+          "canCreateConference": { ".validate": "newData.isBoolean()" },
+          "unlimitedTranslationQuota": { ".validate": "newData.isBoolean()" },
+          "isVerifiedBadge": { ".validate": "newData.isBoolean()" },
+          "isAccountSuspended": { ".validate": "newData.isBoolean()" },
+          "customRoleLabel": { ".validate": "newData.isString() || newData.val() == null" }
+        },
+        "stats": {
+          ".read": true,
+          ".write": true
+        },
+        "badges": {
+          ".read": true,
+          ".write": true,
+          "$badgeId": {
+            ".read": true,
+            ".write": true
+          }
+        },
+        "createdAt": { ".validate": "newData.isNumber()" }
+      }
+    },
+    "usernames": {
+      "$username": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.isString()"
+      }
+    },
+    "user_avatars": {
+      "$userId": {
+        ".read": true,
+        ".write": true,
+        "avatarBase64": { ".validate": "newData.isString()" }
+      }
+    },
+    "chats": {
+      "$chatId": {
+        "members": {
+          ".read": true,
+          ".write": true,
+          "$userId": {
+            ".validate": "newData.isBoolean()"
+          }
+        }
+      }
+    },
+    "messages": {
+      "$chatId": {
+        ".read": true,
+        ".write": true,
+        "$messageId": {
+          ".validate": "newData.hasChildren(['messageId', 'senderId', 'receiverId', 'chatId'])",
+          "messageId": { ".validate": "newData.isString()" },
+          "senderId": { ".validate": "newData.isString()" },
+          "receiverId": { ".validate": "newData.isString()" },
+          "chatId": { ".validate": "newData.isString()" },
+          "originalText": { ".validate": "newData.isString()" },
+          "translatedText": { ".validate": "newData.isString()" },
+          "originalLanguage": { ".validate": "newData.isString()" },
+          "timestamp": { ".validate": "newData.isNumber()" },
+          "isRead": { ".validate": "newData.isBoolean()" },
+          "deliveryStatus": { ".validate": "newData.isString()" },
+          "type": { ".validate": "newData.isString()" },
+          "isPinned": { ".validate": "newData.isBoolean()" },
+          "isStarred": { ".validate": "newData.isBoolean()" },
+          "isEdited": { ".validate": "newData.isBoolean()" },
+          "expiresAt": { ".validate": "newData.isNumber() || newData.val() == null" },
+          "audioBase64": { ".validate": "newData.isString() || newData.val() == null" },
+          "audioDurationMs": { ".validate": "newData.isNumber()" },
+          "voiceTranscript": { ".validate": "newData.isString() || newData.val() == null" },
+          "mediaUrlOrBase64": { ".validate": "newData.isString() || newData.val() == null" },
+          "mediaFileName": { ".validate": "newData.isString() || newData.val() == null" },
+          "reactions": {
+            "$userId": { ".validate": "newData.isString()" }
+          },
+          "replyToMessageId": { ".validate": "newData.isString() || newData.val() == null" },
+          "replyToText": { ".validate": "newData.isString() || newData.val() == null" },
+          "replyToSenderName": { ".validate": "newData.isString() || newData.val() == null" },
+          "callStatus": { ".validate": "newData.isString() || newData.val() == null" },
+          "callDurationSeconds": { ".validate": "newData.isNumber()" }
+        }
+      }
+    },
+    "last_messages": {
+      "$chatId": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "friend_requests": {
+      "$userId": {
+        ".read": true,
+        ".write": true,
+        "$senderId": {
+          ".validate": "newData.hasChildren(['senderId', 'senderUsername'])"
+        }
+      }
+    },
+    "sent_requests": {
+      "$userId": {
+        ".read": true,
+        ".write": true,
+        "$receiverId": {
+          ".validate": "newData.hasChildren(['senderId', 'senderUsername'])"
+        }
+      }
+    },
+    "friends": {
+      "$userId": {
+        ".read": true,
+        ".write": true,
+        "$friendId": {
+          ".validate": "newData.hasChildren(['userId', 'username'])"
+        }
+      }
+    },
+    "calls": {
+      "$callId": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "incoming_calls": {
+      "$userId": {
+        ".read": true,
+        ".write": true,
+        "$callId": {
+          ".read": true,
+          ".write": true
+        }
+      }
+    },
+    "voice_blobs": {
+      "$messageId": {
+        ".read": true,
+        ".write": true,
+        "audioBase64": { ".validate": "newData.isString()" }
+      }
+    },
+    "call_history": {
+      "$userId": {
+        ".read": true,
+        ".write": true,
+        "$callId": {
+          ".validate": "newData.hasChildren(['callId', 'peerId'])"
+        }
+      }
+    },
+    "privacy_settings": {
+      "$userId": {
+        ".read": true,
+        ".write": true
+      }
+    }
+  }
+}

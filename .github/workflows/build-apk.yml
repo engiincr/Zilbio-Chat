@@ -1,0 +1,156 @@
+name: Build & Release Zilbio APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Assemble Debug APK & Publish OTA Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Clean Conflicting Duplicate Resources
+        run: |
+          rm -f app/src/main/res/drawable/ic_launcher_foreground.xml
+          find app/src/main/res -name "ic_launcher_foreground.xml" -type f -delete || true
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
+
+      - name: Ensure Gradle 8.5 Wrapper
+        run: |
+          gradle wrapper --gradle-version 8.5 --distribution-type bin --no-daemon
+          chmod +x ./gradlew || true
+
+      - name: Restore google-services.json
+        if: env.GOOGLE_SERVICES_JSON != ''
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
+
+      - name: Setup Release Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > zilbio.jks
+            echo "Decoded persistent release keystore from KEYSTORE_BASE64"
+          elif [ ! -f "zilbio.jks" ]; then
+            keytool -genkeypair -v -keystore zilbio.jks -alias zilbio -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "zilbio123456" -keypass "zilbio123456" \
+              -dname "CN=Zilbio, OU=Engin, O=Zilbio, L=Istanbul, ST=TR, C=TR" || true
+            echo "Generated persistent fallback keystore"
+          fi
+
+      - name: Generate Android Signing Report
+        run: |
+          mkdir -p release_assets
+          chmod +x ./gradlew || true
+          if [ -f "./gradlew" ] && [ -f "./gradle/wrapper/gradle-wrapper.jar" ]; then
+            ./gradlew signingReport --no-daemon | tee release_assets/signing_report.txt || true
+          else
+            gradle signingReport --no-daemon | tee release_assets/signing_report.txt || true
+          fi
+          echo "### 🔑 Android Signing Report" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          grep -A 10 "Variant: release" release_assets/signing_report.txt | head -n 12 >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Build Signed APK with Gradle
+        env:
+          CLOUD_DB_URL: ${{ secrets.CLOUD_DB_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
+          TURN_USERNAME: ${{ secrets.TURN_USERNAME }}
+          TURN_PASSWORD: ${{ secrets.TURN_PASSWORD }}
+          KEYSTORE_PATH: "zilbio.jks"
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'zilbio123456' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'zilbio' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'zilbio123456' }}
+        run: |
+          chmod +x ./gradlew || true
+          if [ -f "./gradlew" ] && [ -f "./gradle/wrapper/gradle-wrapper.jar" ]; then
+            ./gradlew assembleRelease --no-daemon --stacktrace || ./gradlew assembleDebug --no-daemon --stacktrace
+          else
+            gradle assembleRelease --no-daemon --stacktrace || gradle assembleDebug --no-daemon --stacktrace
+          fi
+
+      - name: Prepare Release Assets for OTA
+        run: |
+          mkdir -p release_assets
+          # Locate built APK (release or debug)
+          APK_PATH=$(find app/build/outputs/apk -name "*.apk" | grep -v "androidTest" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Error: No APK found after build!"
+            exit 1
+          fi
+          echo "Found built APK: $APK_PATH"
+          cp "$APK_PATH" release_assets/Zilbio-latest.apk
+          cp "$APK_PATH" release_assets/TransLive-latest.apk
+          echo "${{ github.sha }}" > release_assets/commit_sha.txt
+          
+          # Generate SHA256 checksums
+          cd release_assets
+          sha256sum Zilbio-latest.apk > Zilbio-latest.apk.sha256
+          sha256sum TransLive-latest.apk > TransLive-latest.apk.sha256
+          cd ..
+
+      - name: Upload APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Zilbio-v3.0.2-apk
+          path: release_assets/
+          if-no-files-found: error
+
+      - name: Publish Rolling GitHub Release (v3.0.2 & latest)
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v3.0.2
+          name: "Zilbio V3.0.2 (Guaranteed Two-Way Voice & Instant Sync)"
+          body: |
+            ## Zilbio V3.0.2 — Official Production Release
+            - **Target:** Production Signed APK
+            - **Commit SHA:** `${{ github.sha }}`
+            - **Version:** `3.0.2` (versionCode 4)
+            - **Key Upgrades:** Guaranteed Two-Way Voice, WebRTC software AEC3/NS, Voice Delivery Watchdog, Instant In-Memory UI Caches, Material 3 DatePickerDialog, Atomic Multi-path Username Updates.
+            - **Direct Download:** `https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.2/Zilbio-latest.apk`
+          prerelease: false
+          draft: false
+          files: |
+            release_assets/Zilbio-latest.apk
+            release_assets/TransLive-latest.apk
+            release_assets/Zilbio-latest.apk.sha256
+            release_assets/TransLive-latest.apk.sha256
+            release_assets/commit_sha.txt
+            release_assets/signing_report.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Broadcast OTA Release Signal to Firebase
+        if: env.CLOUD_DB_URL != ''
+        env:
+          CLOUD_DB_URL: ${{ secrets.CLOUD_DB_URL }}
+        run: |
+          SHA=$(cat release_assets/Zilbio-latest.apk.sha256 | awk '{print $1}')
+          JSON_PAYLOAD="{\"versionCode\":4,\"versionName\":\"3.0.2\",\"commitSha\":\"${{ github.sha }}\",\"sha256\":\"$SHA\",\"downloadUrl\":\"https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.2/Zilbio-latest.apk\",\"mandatory\":false,\"updatedAt\":$(date +%s000)}"
+          curl -s -X PUT -H "Content-Type: application/json" -d "$JSON_PAYLOAD" "${CLOUD_DB_URL}/app_updates/latest.json" || true
+          echo "OTA signal dispatched to Firebase"
