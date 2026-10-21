@@ -38,7 +38,7 @@ data class User(
     val username: String = "",
     val displayName: String = "",
     val passwordHash: String = "",
-    val language: String = "en",
+    val language: String = "tr",
     val avatarBase64: String? = null,
     val status: String = "offline",
     val lastSeen: Long = 0L,
@@ -60,7 +60,7 @@ data class Friend(
     val status: String = "offline",
     val lastSeen: Long = 0L,
     val bio: String = "",
-    val language: String = "en",
+    val language: String = "tr",
     val role: String = "user",
     val permissions: UserPermissions = UserPermissions()
 )
@@ -225,3 +225,12 @@ enum class NetworkQuality {
     WEAK,
     CRITICAL
 }
+
+@Immutable
+data class DeviceSession(
+    val sessionId: String = "",
+    val deviceModel: String = "",
+    val osVersion: String = "",
+    val lastActive: Long = 0L,
+    val isCurrent: Boolean = false
+)

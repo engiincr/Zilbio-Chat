@@ -1,0 +1,30 @@
+Downloading https://services.gradle.org/distributions/gradle-8.5-bin.zip
+............10%.............20%............30%.............40%.............50%............60%.............70%.............80%............90%.............100%
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.5/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Task :app:signingReport
+Variant: debug
+Config: debug
+Store: /home/runner/.config/.android/debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+Variant: release
+Config: release
+Store: /home/runner/work/Zilbio-Chat/Zilbio-Chat/zilbio.jks
+Alias: zilbio
+MD5: C4:DF:55:C0:7B:8D:CD:48:D4:28:25:4D:FA:5C:C5:9E
+SHA1: 06:81:9D:2A:18:3A:08:90:6B:E8:4E:7F:0D:79:29:5B:F4:FC:8D:29
+SHA-256: 4D:8F:90:49:5A:73:6B:0E:44:71:4C:BE:34:3B:A7:E5:57:4C:56:2A:8F:81:9A:41:B6:4C:A0:D9:63:4A:8F:B5
+Valid until: Sunday, March 8, 2054
+----------
+Variant: debugAndroidTest
+Config: debug
+Store: /home/runner/.config/.android/debug.keystore
+Alias: AndroidDebugKey
+Error: Missing keystore
+----------
+
+BUILD SUCCESSFUL in 10s
+1 actionable task: 1 executed

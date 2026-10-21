@@ -1,0 +1,2 @@
+/data/user/0/com.agy/files/usr/bin/bash: line 1: git: command not found
+/data/user/0/com.agy/files/usr/bin/bash: line 2: git: command not found

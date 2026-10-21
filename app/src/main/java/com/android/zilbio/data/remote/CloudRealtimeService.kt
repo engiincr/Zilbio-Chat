@@ -9,12 +9,13 @@ import com.google.gson.reflect.TypeToken
 import com.android.zilbio.domain.model.CallHistoryItem
 import com.android.zilbio.domain.model.CallSession
 import com.android.zilbio.domain.model.CallTranscriptSegment
+import com.android.zilbio.domain.model.DeviceSession
 import com.android.zilbio.domain.model.Friend
 import com.android.zilbio.domain.model.FriendRequest
 import com.android.zilbio.domain.model.Message
 import com.android.zilbio.domain.model.PrivacySettings
 import com.android.zilbio.domain.model.User
-import com.android.zilbio.util.ApiConfig
+import com.android.zilbio.config.ApiConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Call
@@ -55,8 +56,57 @@ object CloudRealtimeService {
         .retryOnConnectionFailure(true)
         .build()
 
-    private val gson = Gson()
+    val gson = Gson()
     private val baseUrl = ApiConfig.CLOUD_DB_URL
+
+    fun <T> parseFirebaseList(json: String?, clazz: Class<T>): List<T> {
+        if (json.isNullOrBlank() || json.trim() == "null") return emptyList()
+        val list = mutableListOf<T>()
+        try {
+            val rootElement = JsonParser.parseString(json)
+            if (rootElement.isJsonObject) {
+                val obj = rootElement.asJsonObject
+                for ((key, value) in obj.entrySet()) {
+                    if (value == null || value.isJsonNull) continue
+                    try {
+                        val parsed = gson.fromJson(value, clazz)
+                        if (parsed != null) {
+                            val adjusted = when (parsed) {
+                                is User -> if (parsed.userId.isEmpty()) parsed.copy(userId = key) else parsed
+                                is Friend -> if (parsed.userId.isEmpty()) parsed.copy(userId = key) else parsed
+                                is FriendRequest -> if (parsed.senderId.isEmpty()) parsed.copy(senderId = key) else parsed
+                                is Message -> if (parsed.messageId.isEmpty()) parsed.copy(messageId = key) else parsed
+                                else -> parsed
+                            }
+                            @Suppress("UNCHECKED_CAST")
+                            list.add(adjusted as T)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "parseFirebaseList item parse error for key $key: ${e.message}")
+                    }
+                }
+            } else if (rootElement.isJsonArray) {
+                val arr = rootElement.asJsonArray
+                for (elem in arr) {
+                    if (elem == null || elem.isJsonNull) continue
+                    try {
+                        val parsed = gson.fromJson(elem, clazz)
+                        if (parsed != null) {
+                            list.add(parsed)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "parseFirebaseList array element parse error: ${e.message}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "parseFirebaseList failed: ${e.message}", e)
+        }
+        return list
+    }
+
+    inline fun <reified T> parseFirebaseList(json: String?): List<T> =
+        parseFirebaseList(json, T::class.java)
 
     // ---- USER OPERATIONS ----
 
@@ -115,22 +165,19 @@ object CloudRealtimeService {
             // 1. Direct lookup in /usernames/{usernameKey}
             val userIdJson = getJson("usernames/$usernameKey")
             if (!userIdJson.isNullOrEmpty() && userIdJson != "null") {
-                val userId = try {
+                val resolvedUid = try {
                     gson.fromJson(userIdJson, String::class.java)?.trim()?.removeSurrounding("\"")
                 } catch (e: Exception) {
                     userIdJson.trim().removeSurrounding("\"")
                 }
-                if (!userId.isNullOrEmpty()) {
-                    val user = searchUserById(userId)
+                if (!resolvedUid.isNullOrEmpty()) {
+                    val user = searchUserById(resolvedUid)
                     if (user != null) return user
                 }
             }
 
-            // 2. Fallback: Search directly across /users registry
-            val allUsersJson = getJson("users") ?: return null
-            val type = object : TypeToken<Map<String, User>>() {}.type
-            val usersMap: Map<String, User>? = gson.fromJson(allUsersJson, type)
-            usersMap?.values?.find { it.username.equals(usernameKey, ignoreCase = true) }
+            // 2. Fallback: Search directly across /users registry via resilient parser
+            getAllUsers().find { it.username.equals(usernameKey, ignoreCase = true) }
         } catch (e: Exception) {
             Log.e(TAG, "searchUserByUsername failed: ${e.message}", e)
             null
@@ -139,10 +186,20 @@ object CloudRealtimeService {
 
     suspend fun searchUserById(userId: String): User? {
         return try {
-            val cleanId = userId.trim().uppercase()
+            val cleanId = userId.trim()
             if (cleanId.isEmpty()) return null
-            val userJson = getJson("users/$cleanId") ?: return null
-            gson.fromJson(userJson, User::class.java)
+
+            // 1. Exact case-sensitive lookup
+            val userJson = getJson("users/$cleanId")
+            if (userJson != null) {
+                val user = gson.fromJson(userJson, User::class.java)
+                if (user != null) {
+                    return if (user.userId.isEmpty()) user.copy(userId = cleanId) else user
+                }
+            }
+
+            // 2. Resilient fallback across all users (handles legacy case discrepancies)
+            getAllUsers().find { it.userId.equals(cleanId, ignoreCase = true) }
         } catch (e: Exception) {
             Log.e(TAG, "searchUserById failed: ${e.message}", e)
             null
@@ -314,8 +371,8 @@ object CloudRealtimeService {
             val putMyFriend = putJson("friends/$myUserId/$friendUserId", myFriendJson)
             val putTheirFriend = putJson("friends/$friendUserId/$myUserId", theirFriendJson)
 
-            val delIncoming = deleteJson("friend_requests/$myUserId/$friendUserId")
-            val delSent = deleteJson("sent_requests/$friendUserId/$myUserId")
+            deleteJson("friend_requests/$myUserId/$friendUserId")
+            deleteJson("sent_requests/$friendUserId/$myUserId")
 
             // Ensure chat membership node exists for security rules
             val chatId = generateChatId(myUserId, friendUserId)
@@ -342,9 +399,7 @@ object CloudRealtimeService {
     suspend fun getIncomingRequests(userId: String): List<FriendRequest> {
         return try {
             val json = getJson("friend_requests/$userId") ?: return emptyList()
-            val type = object : TypeToken<Map<String, FriendRequest>>() {}.type
-            val map: Map<String, FriendRequest>? = gson.fromJson(json, type)
-            map?.values?.toList() ?: emptyList()
+            parseFirebaseList(json, FriendRequest::class.java)
         } catch (e: Exception) {
             Log.e(TAG, "getIncomingRequests failed: ${e.message}", e)
             emptyList()
@@ -354,9 +409,7 @@ object CloudRealtimeService {
     suspend fun getSentRequests(userId: String): List<FriendRequest> {
         return try {
             val json = getJson("sent_requests/$userId") ?: return emptyList()
-            val type = object : TypeToken<Map<String, FriendRequest>>() {}.type
-            val map: Map<String, FriendRequest>? = gson.fromJson(json, type)
-            map?.values?.toList() ?: emptyList()
+            parseFirebaseList(json, FriendRequest::class.java)
         } catch (e: Exception) {
             Log.e(TAG, "getSentRequests failed: ${e.message}", e)
             emptyList()
@@ -366,12 +419,68 @@ object CloudRealtimeService {
     suspend fun getFriends(userId: String): List<Friend> {
         return try {
             val json = getJson("friends/$userId") ?: return emptyList()
-            val type = object : TypeToken<Map<String, Friend>>() {}.type
-            val map: Map<String, Friend>? = gson.fromJson(json, type)
-            map?.values?.toList() ?: emptyList()
+            parseFirebaseList(json, Friend::class.java)
         } catch (e: Exception) {
             Log.e(TAG, "getFriends failed: ${e.message}", e)
             emptyList()
+        }
+    }
+
+    suspend fun getBlockedUsers(userId: String): List<String> {
+        return try {
+            val json = getJson("blocked_users/$userId") ?: return emptyList()
+            val root = JsonParser.parseString(json)
+            val list = mutableListOf<String>()
+            if (root.isJsonObject) {
+                root.asJsonObject.keySet().forEach { list.add(it) }
+            } else if (root.isJsonArray) {
+                root.asJsonArray.forEach { elem ->
+                    if (!elem.isJsonNull) list.add(elem.asString)
+                }
+            }
+            list
+        } catch (e: Exception) {
+            Log.e(TAG, "getBlockedUsers failed: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    suspend fun blockUser(myUserId: String, targetUserId: String): Boolean {
+        return try {
+            putJson("blocked_users/$myUserId/$targetUserId", "true")
+        } catch (e: Exception) {
+            Log.e(TAG, "blockUser failed: ${e.message}", e)
+            false
+        }
+    }
+
+    suspend fun unblockUser(myUserId: String, targetUserId: String): Boolean {
+        return try {
+            deleteJson("blocked_users/$myUserId/$targetUserId")
+        } catch (e: Exception) {
+            Log.e(TAG, "unblockUser failed: ${e.message}", e)
+            false
+        }
+    }
+
+    suspend fun isUserBlocked(myUserId: String, targetUserId: String): Boolean {
+        return try {
+            val res = getJson("blocked_users/$myUserId/$targetUserId")
+            res != null && res.trim() != "null"
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun removeFriend(myUserId: String, friendUserId: String): Boolean {
+        return try {
+            val delMy = deleteJson("friends/$myUserId/$friendUserId")
+            val delTheir = deleteJson("friends/$friendUserId/$myUserId")
+            Log.i(TAG, "removeFriend completed between $myUserId and $friendUserId (my: $delMy, their: $delTheir)")
+            delMy && delTheir
+        } catch (e: Exception) {
+            Log.e(TAG, "removeFriend failed: ${e.message}", e)
+            false
         }
     }
 
@@ -505,9 +614,7 @@ object CloudRealtimeService {
     suspend fun getMessages(chatId: String): List<Message> {
         return try {
             val json = getJson("messages/$chatId") ?: return emptyList()
-            val type = object : TypeToken<Map<String, Message>>() {}.type
-            val map: Map<String, Message>? = gson.fromJson(json, type)
-            map?.values?.sortedBy { it.timestamp } ?: emptyList()
+            parseFirebaseList(json, Message::class.java).sortedBy { it.timestamp }
         } catch (e: Exception) {
             Log.e(TAG, "getMessages failed: ${e.message}", e)
             emptyList()
@@ -528,14 +635,42 @@ object CloudRealtimeService {
         }
     }
 
+    // ---- DEVICE SESSIONS ----
+
+    suspend fun registerDeviceSession(userId: String, session: DeviceSession): Boolean {
+        return try {
+            putJson("device_sessions/$userId/${session.sessionId}", gson.toJson(session))
+        } catch (e: Exception) {
+            Log.e(TAG, "registerDeviceSession failed: ${e.message}", e)
+            false
+        }
+    }
+
+    suspend fun getActiveSessions(userId: String): List<DeviceSession> {
+        return try {
+            val json = getJson("device_sessions/$userId") ?: return emptyList()
+            parseFirebaseList(json, DeviceSession::class.java)
+        } catch (e: Exception) {
+            Log.e(TAG, "getActiveSessions failed: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    suspend fun revokeSession(userId: String, sessionId: String): Boolean {
+        return try {
+            deleteJson("device_sessions/$userId/$sessionId")
+        } catch (e: Exception) {
+            Log.e(TAG, "revokeSession failed: ${e.message}", e)
+            false
+        }
+    }
+
     // ---- ADMIN & PERMISSION MANAGEMENT (Exclusive for @tugkancr) ----
 
     suspend fun getAllUsers(): List<User> {
         return try {
             val json = getJson("users") ?: return emptyList()
-            val type = object : TypeToken<Map<String, User>>() {}.type
-            val map: Map<String, User>? = gson.fromJson(json, type)
-            map?.values?.toList() ?: emptyList()
+            parseFirebaseList(json, User::class.java)
         } catch (e: Exception) {
             Log.e(TAG, "getAllUsers failed: ${e.message}", e)
             emptyList()
@@ -742,7 +877,11 @@ object CloudRealtimeService {
                 addProperty("sdpMLineIndex", sdpMLineIndex)
                 addProperty("senderId", senderId)
             }
-            putJson("calls/$callId/ice_candidates/$key", candidateObj.toString())
+            val jsonStr = candidateObj.toString()
+            if (senderId.isNotBlank()) {
+                putJson("calls/$callId/candidates/$senderId/$key", jsonStr)
+            }
+            putJson("calls/$callId/ice_candidates/$key", jsonStr)
         } catch (e: Exception) {
             Log.e(TAG, "sendIceCandidate failed: ${e.message}", e)
         }
@@ -1037,31 +1176,27 @@ object CloudRealtimeService {
     }
 
     fun listenForIceCandidates(callId: String, onCandidate: (String, String, Int, String) -> Unit): Call {
-        return listenToPath("calls/$callId/ice_candidates") { rawData ->
+        fun parseCandidateObject(obj: JsonObject) {
+            if (obj.has("candidate")) {
+                val cand = obj.get("candidate").asString
+                val sdpMid = if (obj.has("sdpMid") && !obj.get("sdpMid").isJsonNull) obj.get("sdpMid").asString else ""
+                val sdpMLineIndex = if (obj.has("sdpMLineIndex") && !obj.get("sdpMLineIndex").isJsonNull) obj.get("sdpMLineIndex").asInt else 0
+                val senderId = if (obj.has("senderId") && !obj.get("senderId").isJsonNull) obj.get("senderId").asString else ""
+                onCandidate(cand, sdpMid, sdpMLineIndex, senderId)
+            } else {
+                for (entry in obj.entrySet()) {
+                    if (entry.value.isJsonObject) {
+                        parseCandidateObject(entry.value.asJsonObject)
+                    }
+                }
+            }
+        }
+
+        return listenToPath("calls/$callId/candidates") { rawData ->
             try {
                 val dataElement = extractFirebaseData(rawData) ?: return@listenToPath
                 if (dataElement.isJsonObject) {
-                    val obj = dataElement.asJsonObject
-                    if (obj.has("candidate")) {
-                        val cand = obj.get("candidate").asString
-                        val sdpMid = if (obj.has("sdpMid") && !obj.get("sdpMid").isJsonNull) obj.get("sdpMid").asString else ""
-                        val sdpMLineIndex = if (obj.has("sdpMLineIndex") && !obj.get("sdpMLineIndex").isJsonNull) obj.get("sdpMLineIndex").asInt else 0
-                        val senderId = if (obj.has("senderId") && !obj.get("senderId").isJsonNull) obj.get("senderId").asString else ""
-                        onCandidate(cand, sdpMid, sdpMLineIndex, senderId)
-                    } else {
-                        for (entry in obj.entrySet()) {
-                            if (entry.value.isJsonObject) {
-                                val item = entry.value.asJsonObject
-                                if (item.has("candidate")) {
-                                    val cand = item.get("candidate").asString
-                                    val sdpMid = if (item.has("sdpMid") && !item.get("sdpMid").isJsonNull) item.get("sdpMid").asString else ""
-                                    val sdpMLineIndex = if (item.has("sdpMLineIndex") && !item.get("sdpMLineIndex").isJsonNull) item.get("sdpMLineIndex").asInt else 0
-                                    val senderId = if (item.has("senderId") && !item.get("senderId").isJsonNull) item.get("senderId").asString else ""
-                                    onCandidate(cand, sdpMid, sdpMLineIndex, senderId)
-                                }
-                            }
-                        }
-                    }
+                    parseCandidateObject(dataElement.asJsonObject)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "listenForIceCandidates parse error: ${e.message}")
@@ -1267,6 +1402,10 @@ object CloudRealtimeService {
             Log.e(TAG, "patchJson failed for $path: ${e.message}")
             false
         }
+    }
+
+    suspend fun getAppUpdateManifest(): String? {
+        return getJson("app_updates/latest")
     }
 
     private suspend fun getJson(path: String): String? = withContext(Dispatchers.IO) {

@@ -1,0 +1,2 @@
+27:        versionCode = 5
+28:        versionName = "3.0.4"

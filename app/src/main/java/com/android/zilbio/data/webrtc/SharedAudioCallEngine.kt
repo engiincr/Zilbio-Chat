@@ -1,12 +1,16 @@
 package com.android.zilbio.data.webrtc
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.MediaRecorder
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.android.zilbio.domain.model.AudioOutputRoute
 import com.android.zilbio.domain.model.NetworkQuality
-import com.android.zilbio.util.ApiConfig
+import com.android.zilbio.config.ApiConfig
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +50,7 @@ class SharedAudioCallEngine(private val context: Context) {
     private var peerConnectionFactory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
     private var localAudioTrack: AudioTrack? = null
+    private var remoteAudioTrack: AudioTrack? = null
     private var localVideoTrack: VideoTrack? = null
     private var videoSource: VideoSource? = null
     private var videoCapturer: CameraVideoCapturer? = null
@@ -147,6 +152,7 @@ class SharedAudioCallEngine(private val context: Context) {
             stream?.audioTracks?.forEach { track ->
                 track.setEnabled(true)
                 track.setVolume(1.0)
+                remoteAudioTrack = track
                 Log.i(TAG, "Remote AudioTrack enabled via onAddStream: id=${track.id()}")
             }
             stream?.videoTracks?.forEach { track ->
@@ -181,6 +187,7 @@ class SharedAudioCallEngine(private val context: Context) {
             if (track is AudioTrack) {
                 track.setEnabled(true)
                 track.setVolume(1.0)
+                remoteAudioTrack = track
                 Log.i(TAG, "Remote AudioTrack enabled via onAddTrack: id=${track.id()}")
             } else if (track is VideoTrack) {
                 track.setEnabled(true)
@@ -216,20 +223,32 @@ class SharedAudioCallEngine(private val context: Context) {
     fun initialize(enableVideo: Boolean = false) {
         Log.i(TAG, "Initializing SharedAudioCallEngine (video=$enableVideo)...")
 
-        // 1. Initialize EGL Base for hardware-accelerated video
+        // 1. Verify RECORD_AUDIO runtime permission before opening audio module
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "RECORD_AUDIO runtime permission is missing before opening audio device module!")
+            throw SecurityException("RECORD_AUDIO permission is not granted")
+        }
+
+        // 2. Initialize EGL Base for hardware-accelerated video
         rootEglBase = EglBase.create()
 
-        // 2. Initialize PeerConnectionFactory
+        // 3. Pre-initialize AudioDeviceController and enforce MODE_IN_COMMUNICATION before creating audio modules
+        audioDeviceController = AudioDeviceController(context)
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        audioDeviceController?.setAudioRoute(AudioOutputRoute.SPEAKER)
+
+        // 4. Initialize PeerConnectionFactory
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(context)
                 .setEnableInternalTracer(false)
                 .createInitializationOptions()
         )
 
-        // 3. Audio Device Module: Enforce software AEC3 & NS for guaranteed two-way voice across fragmented OEM audio HALs
+        // 5. Audio Device Module: Enforce hardware AEC & NS for optimal acoustic echo cancellation and noise suppression
         audioDeviceModule = JavaAudioDeviceModule.builder(context)
-            .setUseHardwareAcousticEchoCanceler(false)
-            .setUseHardwareNoiseSuppressor(false)
+            .setUseHardwareAcousticEchoCanceler(true)
+            .setUseHardwareNoiseSuppressor(true)
             .setAudioAttributes(
                 android.media.AudioAttributes.Builder()
                     .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
@@ -245,16 +264,12 @@ class SharedAudioCallEngine(private val context: Context) {
             }
             .createAudioDeviceModule()
 
-        // 4. Build PeerConnectionFactory
+        // 6. Build PeerConnectionFactory with configured AudioDeviceModule
         peerConnectionFactory = PeerConnectionFactory.builder()
             .setAudioDeviceModule(audioDeviceModule)
             .createPeerConnectionFactory()
 
-        // 5. Initialize AudioDeviceController (Speaker default, earpiece & BT ready)
-        audioDeviceController = AudioDeviceController(context)
-        audioDeviceController?.setAudioRoute(AudioOutputRoute.SPEAKER)
-
-        Log.i(TAG, "SharedAudioCallEngine initialized successfully with software AEC/NS")
+        Log.i(TAG, "SharedAudioCallEngine initialized successfully with hardware AEC/NS and MODE_IN_COMMUNICATION")
     }
 
     private fun calculateMicLevel(pcmData: ByteArray) {
@@ -291,7 +306,7 @@ class SharedAudioCallEngine(private val context: Context) {
         localAudioTrack = peerConnectionFactory?.createAudioTrack("audio_track_0", audioSource)
         localAudioTrack?.setEnabled(true)
         localAudioTrack?.let { track ->
-            audioSender = peerConnection?.addTrack(track, listOf("ARDAMS"))
+            audioSender = peerConnection?.addTrack(track, listOf("ARDAMSv0"))
         }
 
         // 2. Setup video track if video call enabled
@@ -314,7 +329,7 @@ class SharedAudioCallEngine(private val context: Context) {
             if (frontCamera != null) {
                 videoCapturer = enumerator.createCapturer(frontCamera, null)
                 surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", rootEglBase?.eglBaseContext)
-                videoSource = peerConnectionFactory?.createVideoSource(videoCapturer!!.isScreencast)
+                videoSource = peerConnectionFactory?.createVideoSource(videoCapturer?.isScreencast ?: false)
 
                 videoCapturer?.initialize(surfaceTextureHelper, context, videoSource?.capturerObserver)
                 videoCapturer?.startCapture(640, 480, 30)
@@ -377,7 +392,7 @@ class SharedAudioCallEngine(private val context: Context) {
         }
 
         if (opusPayloadType != null) {
-            val fmtpPrefix = "a=fmtp:$opusPayloadType "
+            val fmtpPrefix = "a=fmtp:$opusPayloadType"
             val tunedFmtp = "$fmtpPrefix minptime=10;useinbandfec=1;usedtx=0;stereo=0;sprop-stereo=0;maxaveragebitrate=32000"
             var fmtpFound = false
             for (i in lines.indices) {
@@ -575,6 +590,9 @@ class SharedAudioCallEngine(private val context: Context) {
             localAudioTrack?.setEnabled(false)
             localAudioTrack?.dispose()
             localAudioTrack = null
+
+            remoteAudioTrack?.setEnabled(false)
+            remoteAudioTrack = null
 
             peerConnection?.close()
             peerConnection?.dispose()

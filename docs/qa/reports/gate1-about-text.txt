@@ -1,0 +1,4 @@
+Status: NOT VERIFIED
+Reason: Emulator AVD zilbio_api34 and adb binary are unavailable in this Android container environment.
+Screenshot docs/qa/reports/gate1-about-v304.png cannot be captured in this environment.
+Source code reference: AboutScreen.kt line 108 binds text dynamically via strings.aboutVersion(BuildConfig.VERSION_NAME), where VERSION_NAME is "3.0.4".

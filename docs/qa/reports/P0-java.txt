@@ -1,0 +1,1 @@
+/data/user/0/com.agy/files/usr/bin/bash: line 19: java: command not found

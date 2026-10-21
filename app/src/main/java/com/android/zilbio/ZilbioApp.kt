@@ -11,7 +11,7 @@ class ZilbioApp : Application() {
 
         // Initialize ML Kit translation models for TR, EN, DE
         try {
-            GeminiTranslationEngine.initMlKit(this)
+            GeminiTranslationEngine.initMlKit()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize ML Kit translation models at startup", e)
         }
@@ -19,8 +19,9 @@ class ZilbioApp : Application() {
         try {
             com.android.zilbio.service.ZilbioNotificationService.initChannels(this)
             com.android.zilbio.service.ZilbioPersistentDaemonService.start(this)
+            com.android.zilbio.data.updater.AppUpdateWorker.scheduleHourlyPeriodicCheck(this)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start ZilbioPersistentDaemonService at startup", e)
+            Log.e(TAG, "Failed to initialize background services at startup", e)
         }
     }
 

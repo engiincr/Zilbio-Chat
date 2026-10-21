@@ -26,13 +26,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.LinearProgressIndicator
+import com.android.zilbio.BuildConfig
+import com.android.zilbio.data.updater.AppUpdateManager
+import com.android.zilbio.data.updater.UpdateState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -82,6 +90,7 @@ import com.android.zilbio.ui.screens.friends.AvatarInitials
 import com.android.zilbio.ui.theme.BackgroundMidnightNavy
 import com.android.zilbio.ui.theme.BorderSlateNavy
 import com.android.zilbio.ui.theme.CallEndCoralRed
+import com.android.zilbio.ui.theme.DestructiveCoralRed
 import com.android.zilbio.ui.theme.NeonLimeAccent
 import com.android.zilbio.ui.theme.SurfaceDarkWarmElevated
 import com.android.zilbio.ui.theme.SurfaceMidnightDark
@@ -96,7 +105,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     navController: NavController? = null,
-    onNavigateBack: () -> Unit = { navController?.popBackStack() },
     onLogout: () -> Unit = {
         navController?.navigate("auth") {
             popUpTo(0) { inclusive = true }
@@ -117,8 +125,16 @@ fun SettingsScreen(
     var isSavingName by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
+    val updateState by AppUpdateManager.updateState.collectAsState()
+    val isDownloading by AppUpdateManager.isDownloading.collectAsState()
+    val downloadProgress by AppUpdateManager.downloadProgress.collectAsState()
+    val latestManifest by AppUpdateManager.latestManifest.collectAsState()
+    var hasInitialized by remember { mutableStateOf(false) }
+
     LaunchedEffect(currentUser) {
-        currentUser?.let { user ->
+        val user = currentUser ?: return@LaunchedEffect
+        if (!hasInitialized) {
+            hasInitialized = true
             editableDisplayName = user.displayName
             selectedLanguageCode = user.language.ifEmpty { "tr" }
             BadgeRewardManager.init(context, user.userId)
@@ -135,26 +151,26 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                        androidx.compose.foundation.Image(
-                            painter = androidx.compose.ui.res.painterResource(id = com.android.zilbio.R.drawable.zilbio_logo_transparent),
-                            contentDescription = "Zilbio Logo",
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = strings.settingsTitle,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextOffWhite
-                        )
-                    }
+                            androidx.compose.foundation.Image(
+                                painter = androidx.compose.ui.res.painterResource(id = com.android.zilbio.R.drawable.zilbio_logo_transparent),
+                                contentDescription = "Zilbio Logo",
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = strings.settingsTitle,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextOffWhite
+                            )
+                        }
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = SurfaceSlateNavy,
                             border = BorderStroke(1.dp, BorderSlateNavy)
                         ) {
                             Text(
-                                text = "V3.0.1",
+                                text = "v${BuildConfig.VERSION_NAME}",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = NeonLimeAccent,
@@ -226,19 +242,19 @@ fun SettingsScreen(
 
                         IconButton(
                             onClick = {
-                                if (editableDisplayName.isNotBlank()) {
-                                    isSavingName = true
-                                    coroutineScope.launch {
-                                        try {
-                                            UserPreferences.updateDisplayName(context, editableDisplayName)
-                                            currentUser?.let { u ->
-                                                val updated = u.copy(displayName = editableDisplayName)
-                                                CloudRealtimeService.registerUser(updated)
-                                            }
-                                            snackbarHostState.showSnackbar(strings.changesSaved)
-                                        } finally {
-                                            isSavingName = false
+                                val trimmedName = editableDisplayName.trim()
+                                isSavingName = true
+                                coroutineScope.launch {
+                                    try {
+                                        UserPreferences.updateDisplayName(context, trimmedName)
+                                        currentUser?.let { u ->
+                                            CloudRealtimeService.updateUserProfile(u.userId, mapOf("displayName" to trimmedName))
                                         }
+                                        snackbarHostState.showSnackbar(strings.changesSaved)
+                                    } catch (e: Exception) {
+                                        snackbarHostState.showSnackbar("Hata: ${e.message}")
+                                    } finally {
+                                        isSavingName = false
                                     }
                                 }
                             },
@@ -692,6 +708,178 @@ fun SettingsScreen(
                 }
             }
 
+            // ==========================================
+            // APPLICATION UPDATES & OTA CARD (Section 9)
+            // ==========================================
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceSlateNavy),
+                border = BorderStroke(1.dp, BorderSlateNavy)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(NeonLimeAccent.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SystemUpdate,
+                                contentDescription = null,
+                                tint = NeonLimeAccent,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Uygulama Güncellemeleri",
+                                color = TextOffWhite,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            val statusSubtitle = when (val state = updateState) {
+                                is UpdateState.Checking -> "Güncellemeler denetleniyor..."
+                                is UpdateState.Downloading -> "İndiriliyor: %${state.progressPercent} (${state.bytesDownloaded / (1024 * 1024)}MB / ${if (state.totalBytes > 0) "${state.totalBytes / (1024 * 1024)}MB" else "..."})"
+                                is UpdateState.ReadyToInstall -> "Yeni sürüm (v${state.manifest.versionName}) kuruluma hazır"
+                                is UpdateState.UpdateAvailable -> "Yeni sürüm mevcut: v${state.manifest.versionName} (Kod ${state.manifest.versionCode})"
+                                is UpdateState.UpToDate -> "En güncel sürüm yüklü: v${BuildConfig.VERSION_NAME}"
+                                is UpdateState.Error -> state.message
+                                UpdateState.Idle -> "Mevcut sürüm: v${BuildConfig.VERSION_NAME} (Kod ${BuildConfig.VERSION_CODE})"
+                            }
+                            Text(
+                                text = statusSubtitle,
+                                color = when (updateState) {
+                                    is UpdateState.UpdateAvailable, is UpdateState.ReadyToInstall -> NeonLimeAccent
+                                    is UpdateState.Error -> DestructiveCoralRed
+                                    else -> TextMutedWarmGrey
+                                },
+                                fontSize = 12.sp,
+                                maxLines = 2
+                            )
+                        }
+                    }
+
+                    // Download Progress Bar
+                    if (isDownloading) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        LinearProgressIndicator(
+                            progress = { downloadProgress / 100f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = NeonLimeAccent,
+                            trackColor = SurfaceMidnightDark
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "Paket indiriliyor...", color = NeonLimeAccent, fontSize = 11.sp)
+                            Text(text = "%$downloadProgress", color = TextOffWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Dynamic Action Buttons
+                    when (val state = updateState) {
+                        is UpdateState.Checking -> {
+                            Button(
+                                onClick = {},
+                                enabled = false,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SurfaceMidnightDark)
+                            ) {
+                                CircularProgressIndicator(
+                                    color = NeonLimeAccent,
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Kontrol Ediliyor...", color = TextOffWhite, fontSize = 13.sp)
+                            }
+                        }
+                        is UpdateState.UpdateAvailable -> {
+                            Button(
+                                onClick = { AppUpdateManager.startDownload(context, state.manifest) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonLimeAccent)
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, tint = SurfaceMidnightDark, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Güncellemeyi İndir (v${state.manifest.versionName})",
+                                    color = SurfaceMidnightDark,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        is UpdateState.ReadyToInstall -> {
+                            Button(
+                                onClick = { AppUpdateManager.installApk(context, state.apkFile, state.manifest) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))
+                            ) {
+                                Icon(Icons.Default.Verified, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Güncellemeyi Yükle",
+                                    color = Color.Black,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        is UpdateState.Error -> {
+                            Button(
+                                onClick = { AppUpdateManager.checkForUpdates(context, manual = true) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SurfaceMidnightDark),
+                                border = BorderStroke(1.dp, BorderSlateNavy)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, tint = NeonLimeAccent, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Tekrar Dene", color = TextOffWhite, fontSize = 12.sp)
+                            }
+                        }
+                        else -> {
+                            Button(
+                                onClick = { AppUpdateManager.checkForUpdates(context, manual = true) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SurfaceMidnightDark),
+                                border = BorderStroke(1.dp, BorderSlateNavy)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, tint = NeonLimeAccent, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Güncellemeleri Denetle", color = TextOffWhite, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+            }
+
             // About & Updates Card Link
             Card(
                 modifier = Modifier
@@ -756,7 +944,7 @@ fun SettingsScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.Logout,
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
                         contentDescription = strings.logout,
                         tint = CallEndCoralRed,
                         modifier = Modifier.size(18.dp)

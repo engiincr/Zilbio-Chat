@@ -22,10 +22,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -109,6 +109,8 @@ fun FriendsScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val currentUser by UserPreferences.getUser(context).collectAsState(initial = null)
+    val realtimeFriends by com.android.zilbio.service.GlobalRealtimeSyncManager.friendsFlow.collectAsState()
+    val realtimeIncoming by com.android.zilbio.service.GlobalRealtimeSyncManager.incomingRequestsFlow.collectAsState()
 
     var selectedTabIndex by remember { mutableIntStateOf(0) } // 0: Arkadaşlar, 1: Gelen İstekler, 2: Gönderilen
     var friendsList by remember { mutableStateOf<List<Friend>>(emptyList()) }
@@ -120,14 +122,28 @@ fun FriendsScreen(
     var selectedFriendForOptions by remember { mutableStateOf<Friend?>(null) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(realtimeFriends) {
+        if (realtimeFriends.isNotEmpty() || friendsList.isEmpty()) {
+            friendsList = realtimeFriends
+        }
+    }
+
+    LaunchedEffect(realtimeIncoming) {
+        incomingList = realtimeIncoming
+    }
+
     val refreshData: () -> Unit = {
         val uid = currentUser?.userId
         if (!uid.isNullOrEmpty()) {
             coroutineScope.launch {
                 isLoading = true
                 try {
-                    friendsList = CloudRealtimeService.getFriends(uid)
-                    incomingList = CloudRealtimeService.getIncomingRequests(uid)
+                    val freshFriends = CloudRealtimeService.getFriends(uid)
+                    friendsList = freshFriends
+                    com.android.zilbio.service.GlobalRealtimeSyncManager.friendsFlow.value = freshFriends
+                    val freshIncoming = CloudRealtimeService.getIncomingRequests(uid)
+                    incomingList = freshIncoming
+                    com.android.zilbio.service.GlobalRealtimeSyncManager.incomingRequestsFlow.value = freshIncoming
                     sentList = CloudRealtimeService.getSentRequests(uid)
                 } catch (e: Exception) {
                     // Gracefully ignore error and retain last state
@@ -156,7 +172,7 @@ fun FriendsScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Geri",
                             tint = TextPrimaryEspresso
                         )
@@ -374,7 +390,7 @@ fun FriendsScreen(
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Chat, contentDescription = null, tint = AccentAmberOrange)
+                            Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, tint = AccentAmberOrange)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Sohbet Aç", color = AccentAmberOrange, fontWeight = FontWeight.Bold)
                         }
@@ -408,8 +424,8 @@ fun FriendsScreen(
     }
 
     // Confirmation dialog for removing friend
-    if (showDeleteConfirmDialog && selectedFriendForOptions != null) {
-        val friendToDelete = selectedFriendForOptions!!
+    val friendToDelete = selectedFriendForOptions
+    if (showDeleteConfirmDialog && friendToDelete != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
             title = { Text("Arkadaşı Kaldır", fontWeight = FontWeight.Bold, color = TextPrimaryEspresso) },
@@ -420,7 +436,7 @@ fun FriendsScreen(
                         val uid = currentUser?.userId
                         if (!uid.isNullOrEmpty()) {
                             coroutineScope.launch {
-                                CloudRealtimeService.declineFriendRequest(uid, friendToDelete.userId)
+                                CloudRealtimeService.removeFriend(uid, friendToDelete.userId)
                                 showDeleteConfirmDialog = false
                                 selectedFriendForOptions = null
                                 refreshData()

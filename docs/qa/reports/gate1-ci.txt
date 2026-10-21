@@ -1,0 +1,27 @@
+Run Number: 80
+Run URL: https://github.com/engiincr/Zilbio-Chat/actions/runs/39649762194
+Head SHA: 2b0adf48b8230a7e5bd7ecb03952b06179e3f282
+Conclusion: success
+Status: NOT VERIFIED (Local git SHA could not be verified against remote head SHA because git binary is missing in container).
+
+Job Steps and Conclusions:
+- Set up job: success
+- Checkout Repository: success
+- Validate Required Secrets: success
+- Write google-services.json: success
+- Clean Conflicting Duplicate Resources: success
+- Set up JDK 17: success
+- Setup Gradle: success
+- Ensure Gradle 8.5 Wrapper: success
+- Setup Release Keystore: success
+- Generate Android Signing Report: success
+- Build APK with Gradle: success
+- Prepare Release Assets for OTA: success
+- Upload APK Artifacts: success
+- Publish Rolling GitHub Release (v3.0.4 & latest): success
+- Broadcast OTA Release Signal to Firebase: success
+- Clean Sensitive Credentials: success
+- Post Setup Gradle: success
+- Post Set up JDK 17: success
+- Post Checkout Repository: success
+- Complete job: success

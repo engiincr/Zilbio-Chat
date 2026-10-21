@@ -3,6 +3,7 @@ package com.android.zilbio.ui.screens.friends
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,12 +15,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.PersonAdd
@@ -96,6 +99,7 @@ fun AddFriendScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val currentUser by UserPreferences.getUser(context).collectAsState(initial = null)
+    val searchHistory by UserPreferences.getSearchHistory(context).collectAsState(initial = emptyList())
 
     var searchModeIndex by remember { mutableIntStateOf(0) } // 0: Kullanıcı Adı, 1: ID ile Ara
     var searchQuery by remember { mutableStateOf("") }
@@ -120,11 +124,13 @@ fun AddFriendScreen(
         }
     }
 
-    val performSearch: () -> Unit = {
-        val query = searchQuery.trim()
+    val performSearch: (String?) -> Unit = { queryOverride ->
+        val query = (queryOverride ?: searchQuery).trim()
         if (query.isNotEmpty()) {
+            if (queryOverride != null) searchQuery = queryOverride
             focusManager.clearFocus()
             coroutineScope.launch {
+                UserPreferences.addSearchQuery(context, query)
                 isSearching = true
                 hasSearched = true
                 searchedUser = null
@@ -159,7 +165,7 @@ fun AddFriendScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Geri",
                             tint = TextPrimaryEspresso
                         )
@@ -273,7 +279,7 @@ fun AddFriendScreen(
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { performSearch() }),
+                keyboardActions = KeyboardActions(onSearch = { performSearch(null) }),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = TextFieldDefaults.colors(
@@ -289,7 +295,7 @@ fun AddFriendScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             Button(
-                onClick = { performSearch() },
+                onClick = { performSearch(null) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
@@ -308,6 +314,66 @@ fun AddFriendScreen(
                         Icon(Icons.Default.Search, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(text = "Kullanıcıyı Ara", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+                }
+            }
+
+            // Recent Searches Chips
+            if (searchHistory.isNotEmpty() && !hasSearched) {
+                Spacer(modifier = Modifier.height(18.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Son Aramalar",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextSecondaryWarmGrey
+                    )
+                    Text(
+                        text = "Temizle",
+                        fontSize = 12.sp,
+                        color = AccentAmberOrange,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable {
+                            coroutineScope.launch { UserPreferences.clearSearchHistory(context) }
+                        }
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(searchHistory) { item ->
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = InputFieldBackground,
+                            border = BorderStroke(1.dp, BorderWarmSubtle),
+                            modifier = Modifier.clickable { performSearch(item) }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = item, fontSize = 12.sp, color = TextPrimaryEspresso)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Sil",
+                                    tint = TextSecondaryWarmGrey,
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .clickable {
+                                            coroutineScope.launch {
+                                                UserPreferences.removeSearchQuery(context, item)
+                                            }
+                                        }
+                                )
+                            }
+                        }
                     }
                 }
             }

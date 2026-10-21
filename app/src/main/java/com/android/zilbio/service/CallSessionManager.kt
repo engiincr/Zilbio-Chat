@@ -266,6 +266,7 @@ class CallSessionManager(private val context: Context) {
         ).apply {
             speakerId = myUser.userId
             speakerName = myUser.displayName.ifBlank { myUser.username }
+            speakerLanguage = myUser.language.ifBlank { "tr" }
         }
         vadChunker = chunker
         chunker.start()
@@ -292,6 +293,9 @@ class CallSessionManager(private val context: Context) {
                     val segment = gson.fromJson(json, CallTranscriptSegment::class.java)
                     if (segment != null) {
                         appendTranscript(segment)
+                        if (segment.speakerId != myUser.userId) {
+                            ensureSegmentTranslated(segment, myUser.language.ifBlank { "tr" })
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -302,6 +306,7 @@ class CallSessionManager(private val context: Context) {
         val transcriptCall = CloudRealtimeService.listenForTranscripts(callId) { segment ->
             if (segment.speakerId != myUser.userId) {
                 appendTranscript(segment)
+                ensureSegmentTranslated(segment, myUser.language.ifBlank { "tr" })
             }
         }
         synchronized(sseListeners) { sseListeners.add(transcriptCall) }
@@ -457,6 +462,7 @@ class CallSessionManager(private val context: Context) {
         ).apply {
             speakerId = myUser.userId
             speakerName = myUser.displayName.ifBlank { myUser.username }
+            speakerLanguage = myUser.language.ifBlank { "tr" }
         }
         vadChunker = chunker
         chunker.start()
@@ -481,6 +487,9 @@ class CallSessionManager(private val context: Context) {
                     val segment = gson.fromJson(json, CallTranscriptSegment::class.java)
                     if (segment != null) {
                         appendTranscript(segment)
+                        if (segment.speakerId != myUser.userId) {
+                            ensureSegmentTranslated(segment, myUser.language.ifBlank { "tr" })
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -491,6 +500,7 @@ class CallSessionManager(private val context: Context) {
         val transcriptCall = CloudRealtimeService.listenForTranscripts(callId) { segment ->
             if (segment.speakerId != myUser.userId) {
                 appendTranscript(segment)
+                ensureSegmentTranslated(segment, myUser.language.ifBlank { "tr" })
             }
         }
         synchronized(sseListeners) { sseListeners.add(transcriptCall) }
@@ -709,14 +719,43 @@ class CallSessionManager(private val context: Context) {
 
     private fun appendTranscript(segment: CallTranscriptSegment) {
         val current = _transcripts.value.toMutableList()
-        val isDuplicate = current.any {
+        val index = current.indexOfFirst {
             it.speakerId == segment.speakerId &&
                     it.timestamp == segment.timestamp &&
                     it.originalText == segment.originalText
         }
-        if (!isDuplicate) {
+        if (index >= 0) {
+            if (segment.translatedText.isNotBlank() && current[index].translatedText != segment.translatedText) {
+                current[index] = segment
+                _transcripts.value = current
+            }
+        } else {
             current.add(segment)
             _transcripts.value = current
+        }
+    }
+
+    private fun ensureSegmentTranslated(segment: CallTranscriptSegment, localLanguage: String) {
+        val srcLang = segment.originalLanguage.ifBlank { "en" }
+        if (localLanguage.equals(srcLang, ignoreCase = true)) return
+        if (segment.translatedText.isNotBlank() && segment.translatedText != segment.originalText) return
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val res = com.android.zilbio.data.remote.GeminiTranslationEngine.translateText(
+                    text = segment.originalText,
+                    sourceLanguage = srcLang,
+                    targetLanguage = localLanguage
+                )
+                if (res.translatedText.isNotBlank() && res.translatedText != segment.originalText) {
+                    val updated = segment.copy(translatedText = res.translatedText)
+                    scope.launch(Dispatchers.Main) {
+                        appendTranscript(updated)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to translate remote transcript segment: ${e.message}")
+            }
         }
     }
 

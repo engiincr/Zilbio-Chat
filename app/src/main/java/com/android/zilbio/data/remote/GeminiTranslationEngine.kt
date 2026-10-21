@@ -1,6 +1,5 @@
 package com.android.zilbio.data.remote
 
-import android.content.Context
 import android.util.Base64
 import android.util.Log
 import android.util.LruCache
@@ -15,7 +14,7 @@ import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
 import com.android.zilbio.domain.model.TranslationResult
-import com.android.zilbio.util.ApiConfig
+import com.android.zilbio.config.ApiConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -25,6 +24,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -43,8 +43,14 @@ object GeminiTranslationEngine {
 
     private val gson = Gson()
 
-    // High-speed LRU Cache for translated texts (Item #17)
+    // High-speed LRU Cache for translated texts keyed by MD5(text + ":" + srcLang + ":" + targetLang)
     private val translationCache = LruCache<String, String>(500)
+
+    fun md5(input: String): String {
+        val md = MessageDigest.getInstance("MD5")
+        val digest = md.digest(input.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
 
     // Track quota
     private val _quotaWarning = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
@@ -57,7 +63,7 @@ object GeminiTranslationEngine {
     private val translators = ConcurrentHashMap<String, Translator>()
     private val mlKitReady = AtomicBoolean(false)
 
-    fun initMlKit(context: Context) {
+    fun initMlKit() {
         val pairs = listOf(
             "tr" to "en",
             "en" to "tr",
@@ -121,12 +127,12 @@ object GeminiTranslationEngine {
                 translatedText = text,
                 sourceLanguage = sourceLanguage,
                 targetLanguage = targetLanguage,
-                provider = "none"
+                provider = "same_language_bypass"
             )
         }
 
-        // Fast path: Check LRU cache keyed by text hash, source language, and target language
-        val cacheKey = "${text.hashCode()}_${sourceLanguage.lowercase()}_${targetLanguage.lowercase()}"
+        // Fast path: Check LRU cache keyed by MD5(text + ":" + srcLang + ":" + targetLang)
+        val cacheKey = md5("$text:${sourceLanguage.lowercase()}:${targetLanguage.lowercase()}")
         synchronized(translationCache) {
             translationCache.get(cacheKey)?.let { cachedTranslation ->
                 return@withContext TranslationResult(
@@ -139,7 +145,7 @@ object GeminiTranslationEngine {
             }
         }
 
-        // Fast path 2: Ultra-fast ML Kit on-device translation (10-20ms latency, 0 quota, offline)
+        // Fast path 2: Ultra-fast ML Kit on-device translation (target response time < 50ms, 0 quota, offline)
         try {
             val mlKitRes = translateWithMlKit(text, sourceLanguage, targetLanguage)
             if (mlKitRes.translatedText.isNotBlank() && mlKitRes.translatedText != text) {
@@ -182,24 +188,22 @@ object GeminiTranslationEngine {
             add("contents", contentsArray)
         }.toString()
 
-        // 1. Try Gemini primary model (gemini-3.8-flash)
+        // 1. Try Gemini primary model
         var responseText = callGemini(ApiConfig.GEMINI_MODEL, requestJson)
 
-        // 2. Fallback to Gemini fallback model (gemini-1.5-flash)
-        if (responseText == null) {
+        if (responseText == null && ApiConfig.ENABLE_MODEL_FALLBACK) {
             Log.w(TAG, "Gemini primary model failed, trying fallback: ${ApiConfig.GEMINI_FALLBACK_MODEL}")
             responseText = callGemini(ApiConfig.GEMINI_FALLBACK_MODEL, requestJson)
-        }
-
-        // 3. Fallback to confirmed live model: gemini-2.5-flash
-        if (responseText == null) {
-            Log.w(TAG, "Gemini fallback failed, trying confirmed active model: gemini-2.5-flash")
-            responseText = callGemini("gemini-2.5-flash", requestJson)
-        }
-
-        // 4. Fallback to gemini-flash-latest
-        if (responseText == null) {
-            responseText = callGemini("gemini-flash-latest", requestJson)
+            if (responseText == null) {
+                Log.w(TAG, "Gemini fallback failed, trying confirmed active model: gemini-2.0-flash")
+                responseText = callGemini("gemini-2.0-flash", requestJson)
+            }
+            if (responseText == null) {
+                responseText = callGemini("gemini-1.5-flash-8b", requestJson)
+            }
+            if (responseText == null) {
+                responseText = callGemini("gemini-flash-latest", requestJson)
+            }
         }
 
         // Parse Gemini response
@@ -302,14 +306,17 @@ object GeminiTranslationEngine {
         val requestJson = requestObj.toString()
 
         var responseText = callGemini(ApiConfig.GEMINI_MODEL, requestJson)
-        if (responseText == null) {
+        if (responseText == null && ApiConfig.ENABLE_MODEL_FALLBACK) {
             responseText = callGemini(ApiConfig.GEMINI_FALLBACK_MODEL, requestJson)
-        }
-        if (responseText == null) {
-            responseText = callGemini("gemini-2.5-flash", requestJson)
-        }
-        if (responseText == null) {
-            responseText = callGemini("gemini-flash-latest", requestJson)
+            if (responseText == null) {
+                responseText = callGemini("gemini-2.0-flash", requestJson)
+            }
+            if (responseText == null) {
+                responseText = callGemini("gemini-1.5-flash-8b", requestJson)
+            }
+            if (responseText == null) {
+                responseText = callGemini("gemini-flash-latest", requestJson)
+            }
         }
 
         if (responseText != null) {
@@ -317,12 +324,41 @@ object GeminiTranslationEngine {
                 val cleaned = stripMarkdownFences(responseText)
                 val jsonObj = JsonParser.parseString(cleaned).asJsonObject
                 val original = if (jsonObj.has("original")) jsonObj.get("original").asString else ""
-                val translated = if (jsonObj.has("translated")) jsonObj.get("translated").asString else ""
+                var translated = if (jsonObj.has("translated")) jsonObj.get("translated").asString else ""
                 val detected = if (jsonObj.has("detectedLanguage")) jsonObj.get("detectedLanguage").asString else "tr"
+
+                // Same-language bypass for call speech
+                if (detected.equals(targetLanguage, ignoreCase = true)) {
+                    return@withContext TranslationResult(
+                        originalText = original,
+                        translatedText = original,
+                        sourceLanguage = detected,
+                        targetLanguage = targetLanguage,
+                        provider = "same_language_bypass"
+                    )
+                }
+
+                // Prioritize on-device Google ML Kit translation for zero-latency call subtitles (<50ms)
+                if (original.isNotBlank()) {
+                    try {
+                        val mlKitRes = translateWithMlKit(original, detected, targetLanguage)
+                        if (mlKitRes.translatedText.isNotBlank() && mlKitRes.translatedText != original) {
+                            return@withContext TranslationResult(
+                                originalText = original,
+                                translatedText = mlKitRes.translatedText,
+                                sourceLanguage = detected,
+                                targetLanguage = targetLanguage,
+                                provider = "mlkit"
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.d(TAG, "ML Kit call caption fast path failed, falling back to Gemini: ${e.message}")
+                    }
+                }
 
                 return@withContext TranslationResult(
                     originalText = original,
-                    translatedText = translated,
+                    translatedText = if (translated.isNotBlank()) translated else original,
                     sourceLanguage = detected,
                     targetLanguage = targetLanguage,
                     provider = "gemini"
@@ -384,7 +420,7 @@ object GeminiTranslationEngine {
         null
     }
 
-    private suspend fun translateWithMlKit(
+    suspend fun translateWithMlKit(
         text: String,
         sourceLanguage: String,
         targetLanguage: String
@@ -401,12 +437,20 @@ object GeminiTranslationEngine {
                 .build()
             translator = Translation.getClient(options)
             translators[key] = translator
+            val conditions = DownloadConditions.Builder().build()
+            translator.downloadModelIfNeeded(conditions)
+                .addOnSuccessListener {
+                    Log.d(TAG, "ML Kit model ready for $key")
+                }
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "ML Kit background download failed for $key: ${e.message}")
+                }
         }
 
         val translated = try {
-            Tasks.await(translator.translate(text), 8, TimeUnit.SECONDS)
+            Tasks.await(translator.translate(text), 4, TimeUnit.SECONDS)
         } catch (e: Exception) {
-            Log.e(TAG, "ML Kit translation failed: ${e.message}", e)
+            Log.d(TAG, "ML Kit translation not ready or failed ($key): ${e.message}")
             text
         }
 
@@ -420,9 +464,25 @@ object GeminiTranslationEngine {
     }
 
     private fun getMlKitLanguage(code: String): String {
-        return when (code.lowercase().trim()) {
+        val clean = code.lowercase().trim()
+        val tagLang = TranslateLanguage.fromLanguageTag(clean)
+        if (tagLang != null) return tagLang
+
+        return when (clean) {
             "tr" -> TranslateLanguage.TURKISH
             "de" -> TranslateLanguage.GERMAN
+            "es" -> TranslateLanguage.SPANISH
+            "fr" -> TranslateLanguage.FRENCH
+            "it" -> TranslateLanguage.ITALIAN
+            "ru" -> TranslateLanguage.RUSSIAN
+            "ar" -> TranslateLanguage.ARABIC
+            "pt" -> TranslateLanguage.PORTUGUESE
+            "zh" -> TranslateLanguage.CHINESE
+            "ja" -> TranslateLanguage.JAPANESE
+            "ko" -> TranslateLanguage.KOREAN
+            "nl" -> TranslateLanguage.DUTCH
+            "pl" -> TranslateLanguage.POLISH
+            "uk" -> TranslateLanguage.UKRAINIAN
             else -> TranslateLanguage.ENGLISH
         }
     }

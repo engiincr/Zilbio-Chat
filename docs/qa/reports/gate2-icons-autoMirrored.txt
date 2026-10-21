@@ -1,0 +1,2 @@
+214:                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kapat", tint = TextOffWhite)
+299:                                imageVector = Icons.AutoMirrored.Filled.Chat,

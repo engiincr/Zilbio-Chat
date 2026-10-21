@@ -139,6 +139,7 @@ class AudioDeviceController(private val context: Context) : SensorEventListener 
         return list
     }
 
+    @Suppress("DEPRECATION")
     fun setAudioRoute(route: AudioOutputRoute) {
         Log.i(TAG, "Changing audio route to: $route")
         _currentRoute.value = route
@@ -160,57 +161,55 @@ class AudioDeviceController(private val context: Context) : SensorEventListener 
                         it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
                         it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
                     }
+                    else -> null
                 }
                 if (targetDevice != null) {
-                    audioManager.setCommunicationDevice(targetDevice)
-                }
-            }
-
-            when (route) {
-                AudioOutputRoute.EARPIECE -> {
-                    audioManager.isSpeakerphoneOn = false
-                    try {
-                        audioManager.stopBluetoothSco()
-                        audioManager.isBluetoothScoOn = false
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Bluetooth SCO stop failed: ${e.message}")
-                    }
-                    enableProximitySensor(true)
-                }
-                AudioOutputRoute.SPEAKER -> {
-                    enableProximitySensor(false)
-                    try {
-                        audioManager.stopBluetoothSco()
-                        audioManager.isBluetoothScoOn = false
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Bluetooth SCO stop failed: ${e.message}")
-                    }
-                    audioManager.isSpeakerphoneOn = true
-                }
-                AudioOutputRoute.WIRED_HEADSET -> {
-                    enableProximitySensor(false)
-                    audioManager.isSpeakerphoneOn = false
-                    try {
-                        audioManager.stopBluetoothSco()
-                        audioManager.isBluetoothScoOn = false
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Bluetooth SCO stop failed: ${e.message}")
+                    val success = audioManager.setCommunicationDevice(targetDevice)
+                    Log.i(TAG, "setCommunicationDevice: ${targetDevice.type}, success=$success")
+                } else {
+                    audioManager.clearCommunicationDevice()
+                    if (route == AudioOutputRoute.SPEAKER) {
+                        audioManager.isSpeakerphoneOn = true
+                    } else if (route == AudioOutputRoute.EARPIECE) {
+                        audioManager.isSpeakerphoneOn = false
                     }
                 }
-                AudioOutputRoute.BLUETOOTH -> {
-                    enableProximitySensor(false)
-                    audioManager.isSpeakerphoneOn = false
-                    try {
-                        audioManager.startBluetoothSco()
-                        audioManager.isBluetoothScoOn = true
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Bluetooth SCO start failed: ${e.message}")
+                enableProximitySensor(route == AudioOutputRoute.EARPIECE)
+            } else {
+                // API < 31 Legacy Audio Routing
+                when (route) {
+                    AudioOutputRoute.EARPIECE -> {
+                        audioManager.isSpeakerphoneOn = false
+                        try {
+                            audioManager.stopBluetoothSco()
+                            audioManager.isBluetoothScoOn = false
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Bluetooth SCO stop failed: ${e.message}")
+                        }
+                        enableProximitySensor(true)
                     }
-                }
-                @Suppress("DEPRECATION")
-                AudioOutputRoute.BLUETOOTH_OR_HEADSET -> {
-                    enableProximitySensor(false)
-                    if (_isBluetoothConnected.value) {
+                    AudioOutputRoute.SPEAKER -> {
+                        enableProximitySensor(false)
+                        try {
+                            audioManager.stopBluetoothSco()
+                            audioManager.isBluetoothScoOn = false
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Bluetooth SCO stop failed: ${e.message}")
+                        }
+                        audioManager.isSpeakerphoneOn = true
+                    }
+                    AudioOutputRoute.WIRED_HEADSET -> {
+                        enableProximitySensor(false)
+                        audioManager.isSpeakerphoneOn = false
+                        try {
+                            audioManager.stopBluetoothSco()
+                            audioManager.isBluetoothScoOn = false
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Bluetooth SCO stop failed: ${e.message}")
+                        }
+                    }
+                    AudioOutputRoute.BLUETOOTH -> {
+                        enableProximitySensor(false)
                         audioManager.isSpeakerphoneOn = false
                         try {
                             audioManager.startBluetoothSco()
@@ -218,18 +217,35 @@ class AudioDeviceController(private val context: Context) : SensorEventListener 
                         } catch (e: Exception) {
                             Log.w(TAG, "Bluetooth SCO start failed: ${e.message}")
                         }
-                    } else {
-                        audioManager.isSpeakerphoneOn = false
-                        try {
-                            audioManager.stopBluetoothSco()
-                            audioManager.isBluetoothScoOn = false
-                        } catch (e: Exception) {}
                     }
+                    AudioOutputRoute.BLUETOOTH_OR_HEADSET -> {
+                        enableProximitySensor(false)
+                        if (_isBluetoothConnected.value) {
+                            audioManager.isSpeakerphoneOn = false
+                            try {
+                                audioManager.startBluetoothSco()
+                                audioManager.isBluetoothScoOn = true
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Bluetooth SCO start failed: ${e.message}")
+                            }
+                        } else {
+                            audioManager.isSpeakerphoneOn = false
+                            try {
+                                audioManager.stopBluetoothSco()
+                                audioManager.isBluetoothScoOn = false
+                            } catch (e: Exception) {}
+                        }
+                    }
+                    else -> {}
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error switching audio route: ${e.message}", e)
         }
+    }
+
+    fun resetAudioMode() {
+        release()
     }
 
     private fun enableProximitySensor(enable: Boolean) {

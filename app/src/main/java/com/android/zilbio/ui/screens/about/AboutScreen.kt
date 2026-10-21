@@ -72,6 +72,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.android.zilbio.BuildConfig
 import com.android.zilbio.data.local.UserPreferences
 import com.android.zilbio.data.updater.GitHubAutoUpdater
 import com.android.zilbio.data.updater.UpdateState
@@ -265,7 +266,7 @@ fun AboutScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Version ${GitHubAutoUpdater.DEFAULT_VERSION_NAME}",
+                                text = "Version v${BuildConfig.VERSION_NAME}",
                                 color = AccentNeonLime,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -373,8 +374,8 @@ fun AboutScreen(
                             val statusDescription = when (val state = updateState) {
                                 is UpdateState.Checking -> "GitHub API kontrol ediliyor..."
                                 is UpdateState.Downloading -> "İndiriliyor: %${state.progressPercent}"
-                                is UpdateState.ReadyToInstall -> "Yeni paket kuruluma hazır"
-                                is UpdateState.UpdateAvailable -> "Yeni commit: ${state.latestSha.take(7)}"
+                                is UpdateState.ReadyToInstall -> "Yeni paket kuruluma hazır (v${state.manifest.versionName})"
+                                is UpdateState.UpdateAvailable -> "Yeni sürüm: v${state.manifest.versionName} (${state.manifest.commitSha.take(7)})"
                                 is UpdateState.UpToDate -> "Sistem en güncel sürümde"
                                 is UpdateState.Error -> state.message
                                 UpdateState.Idle -> if (installedSha.isNotEmpty()) "Kurulu SHA: ${installedSha.take(7)}" else "GitHub CI/CD otomatik senkronizasyon"
@@ -437,8 +438,8 @@ fun AboutScreen(
                                 onClick = {
                                     GitHubAutoUpdater.startDownload(
                                         context = context,
-                                        downloadUrl = state.downloadUrl,
-                                        latestSha = state.latestSha
+                                        downloadUrl = state.manifest.downloadUrl,
+                                        latestSha = state.manifest.commitSha
                                     )
                                 },
                                 modifier = Modifier.fillMaxWidth(),
@@ -447,8 +448,9 @@ fun AboutScreen(
                             ) {
                                 Icon(Icons.Default.Download, contentDescription = null, tint = BackgroundMidnightNavy)
                                 Spacer(modifier = Modifier.width(8.dp))
+                                val versionDisplay = if (state.manifest.versionName.isNotEmpty()) "v${state.manifest.versionName}" else state.manifest.commitSha.take(7)
                                 Text(
-                                    text = "Şimdi İndir ve Güncelle (${state.latestSha.take(7)})",
+                                    text = "Şimdi İndir ve Güncelle ($versionDisplay)",
                                     color = BackgroundMidnightNavy,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -457,7 +459,7 @@ fun AboutScreen(
                         is UpdateState.ReadyToInstall -> {
                             Button(
                                 onClick = {
-                                    GitHubAutoUpdater.installApk(context, state.apkFile, state.latestSha)
+                                    GitHubAutoUpdater.installApk(context, state.apkFile, state.manifest.commitSha)
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(10.dp),

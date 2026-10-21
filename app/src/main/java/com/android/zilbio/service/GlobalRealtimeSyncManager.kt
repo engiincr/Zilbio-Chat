@@ -6,6 +6,8 @@ import com.android.zilbio.data.local.UserPreferences
 import com.android.zilbio.data.remote.CloudRealtimeService
 import com.android.zilbio.domain.model.CallHistoryItem
 import com.android.zilbio.domain.model.CallSession
+import com.android.zilbio.domain.model.Friend
+import com.android.zilbio.domain.model.FriendRequest
 import com.android.zilbio.domain.model.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +37,7 @@ object GlobalRealtimeSyncManager {
 
     // Hot In-Memory Caches for Zero-Lag UI everywhere (Phase 5)
     val friendsFlow = MutableStateFlow<List<Friend>>(emptyList())
+    val incomingRequestsFlow = MutableStateFlow<List<FriendRequest>>(emptyList())
     val lastMessagesFlow = MutableStateFlow<Map<String, Message>>(emptyMap())
 
     private var currentUserId: String? = null
@@ -49,13 +52,19 @@ object GlobalRealtimeSyncManager {
 
         ZilbioNotificationService.initChannels(context)
 
-        // Pre-warm in-memory friend cache
+        // Pre-warm in-memory friend & request caches
         scope.launch {
             try {
                 val friends = CloudRealtimeService.getFriends(userId)
                 friendsFlow.value = friends
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to load initial friends cache: ${e.message}")
+            }
+            try {
+                val requests = CloudRealtimeService.getIncomingRequests(userId)
+                incomingRequestsFlow.value = requests
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to load initial friend requests cache: ${e.message}")
             }
         }
 
@@ -67,11 +76,29 @@ object GlobalRealtimeSyncManager {
         }
         activeCalls.add(callListener)
 
-        // 2. High-reliability 1.5s Polling Fallback for Incoming Calls
+        // 2. Listen for Incoming Friend Requests via SSE
+        val requestListener = CloudRealtimeService.listenForFriendRequests(userId) { req ->
+            val cur = incomingRequestsFlow.value.toMutableList()
+            if (cur.none { it.senderId == req.senderId }) {
+                cur.add(0, req)
+                incomingRequestsFlow.value = cur
+                ZilbioNotificationService.showFriendRequestNotification(
+                    context = context,
+                    senderId = req.senderId,
+                    senderUsername = req.senderUsername,
+                    senderDisplayName = req.senderDisplayName
+                )
+            }
+        }
+        activeCalls.add(requestListener)
+
+        // 3. High-reliability Polling Fallback (Calls every 1.5s, Friend requests every 3s)
         pollingJob?.cancel()
+        var pollTick = 0
         pollingJob = scope.launch {
             while (isActive) {
                 delay(1500L)
+                pollTick++
                 try {
                     if (_incomingCallState.value == null) {
                         val activeCalls = CloudRealtimeService.getActiveIncomingCalls(userId)
@@ -81,13 +108,29 @@ object GlobalRealtimeSyncManager {
                             handleIncomingCall(context, userId, ringing)
                         }
                     }
+
+                    if (pollTick % 2 == 0) {
+                        val latestReqs = CloudRealtimeService.getIncomingRequests(userId)
+                        val knownIds = incomingRequestsFlow.value.map { it.senderId }.toSet()
+                        for (req in latestReqs) {
+                            if (!knownIds.contains(req.senderId)) {
+                                ZilbioNotificationService.showFriendRequestNotification(
+                                    context = context,
+                                    senderId = req.senderId,
+                                    senderUsername = req.senderUsername,
+                                    senderDisplayName = req.senderDisplayName
+                                )
+                            }
+                        }
+                        incomingRequestsFlow.value = latestReqs
+                    }
                 } catch (e: Exception) {
                     // Polling network blip ignored
                 }
             }
         }
 
-        // 3. Listen for Last Messages across all chats (Global Sync & Notifications)
+        // 4. Listen for Last Messages across all chats (Global Sync & Notifications)
         val msgListener = CloudRealtimeService.listenToLastMessages { chatId, message ->
             val cur = lastMessagesFlow.value.toMutableMap()
             cur[chatId] = message
@@ -96,7 +139,7 @@ object GlobalRealtimeSyncManager {
         }
         activeCalls.add(msgListener)
 
-        // 4. Mark User Status as Online
+        // 5. Mark User Status as Online
         scope.launch {
             CloudRealtimeService.updateUserPresence(userId, true)
         }

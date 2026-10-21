@@ -93,6 +93,7 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.TextButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,9 +120,12 @@ fun PersonalProfileScreen(
     var isSaving by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
+    var hasInitialized by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentUser) {
-        currentUser?.let { user ->
+        val user = currentUser ?: return@LaunchedEffect
+        if (!hasInitialized) {
+            hasInitialized = true
             username = user.username
             displayName = user.displayName
             bio = user.bio

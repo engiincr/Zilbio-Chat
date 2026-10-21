@@ -1,0 +1,5 @@
+Status: NOT VERIFIED
+Reason: aapt is missing (Android build-tools not installed in local container environment).
+Direct unzip manifest extraction tokens:
+3.0.4
+com.android.zilbio

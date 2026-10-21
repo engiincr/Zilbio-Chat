@@ -1,0 +1,4 @@
+Status: NOT VERIFIED
+Reason: JDK 17 is missing and baseline-lint.txt does not exist.
+Command 'bash ./gradlew lint' cannot execute without Java runtime.
+Comparison against baseline cannot be performed.

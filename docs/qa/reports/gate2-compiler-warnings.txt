@@ -1,0 +1,3 @@
+Status: NOT VERIFIED
+Reason: G1.3 local build was NOT VERIFIED due to missing Java runtime; gate1-build.txt contains "NOT VERIFIED: JDK 17 missing".
+No compiler output was produced to extract "w: " warnings.

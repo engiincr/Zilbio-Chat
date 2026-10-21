@@ -1,0 +1,4 @@
+HTTP Status: SKIPPED
+Date: Wed Oct 21 18:21:30 UTC 2026
+Reason: GEMINI_API_KEY environment variable is not set in this container environment.
+Status: NOT VERIFIED (Live API tests skipped without secret per prompt instructions).

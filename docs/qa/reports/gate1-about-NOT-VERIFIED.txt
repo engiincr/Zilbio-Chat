@@ -1,0 +1,4 @@
+Status: NOT VERIFIED
+Reason: adb tool is missing and running AVD zilbio_api34 is unavailable in this Android terminal container environment.
+Screenshot docs/qa/reports/gate1-about-v304.png cannot be captured locally.
+Verification requires: An active Android device or emulator with adb installed to install Zilbio-latest.apk, open Settings -> Hakkında, and capture screencap.

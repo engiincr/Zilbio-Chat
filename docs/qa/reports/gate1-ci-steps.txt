@@ -1,0 +1,37 @@
+Workflow File: .github/workflows/build-apk.yml
+All Step Names (Step names only, values never printed):
+      - name: Checkout Repository
+      - name: Validate Required Secrets
+      - name: Write google-services.json
+      - name: Clean Conflicting Duplicate Resources
+      - name: Set up JDK 17
+      - name: Setup Gradle
+      - name: Ensure Gradle 8.5 Wrapper
+      - name: Setup Release Keystore
+      - name: Generate Android Signing Report
+      - name: Build APK with Gradle
+      - name: Prepare Release Assets for OTA
+      - name: Upload APK Artifacts
+      - name: Publish Rolling GitHub Release (v3.0.4 & latest)
+      - name: Broadcast OTA Release Signal to Firebase
+      - name: Clean Sensitive Credentials
+
+Secret-Check Step Code Confirmation:
+Step Name: "Validate Required Secrets" (Lines 22-40)
+Lines 24-30:
+  MISSING_SECRETS=()
+  [ -z "${{ secrets.CLOUD_DB_URL }}" ] && MISSING_SECRETS+=("CLOUD_DB_URL")
+  [ -z "${{ secrets.GEMINI_API_KEY }}" ] && MISSING_SECRETS+=("GEMINI_API_KEY")
+  [ -z "${{ secrets.GEMINI_API_KEY2 }}" ] && MISSING_SECRETS+=("GEMINI_API_KEY2")
+  [ -z "${{ secrets.TURN_USERNAME }}" ] && MISSING_SECRETS+=("TURN_USERNAME")
+  [ -z "${{ secrets.TURN_PASSWORD }}" ] && MISSING_SECRETS+=("TURN_PASSWORD")
+  [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ] && MISSING_SECRETS+=("GOOGLE_SERVICES_JSON")
+Lines 32-38:
+  if [ ${#MISSING_SECRETS[@]} -ne 0 ]; then
+    echo "❌ Error: The following required secrets are missing or empty:"
+    for secret in "${MISSING_SECRETS[@]}"; do
+      echo "  - $secret"
+    done
+    exit 1
+  fi
+Status: PASS (Checks CLOUD_DB_URL, GEMINI_API_KEY, GEMINI_API_KEY2, TURN_USERNAME, TURN_PASSWORD, GOOGLE_SERVICES_JSON and exits 1 on empty).

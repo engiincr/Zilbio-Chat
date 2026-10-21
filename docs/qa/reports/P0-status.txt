@@ -1,0 +1,1 @@
+/data/user/0/com.agy/files/usr/bin/bash: line 7: git: command not found

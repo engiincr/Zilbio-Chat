@@ -1,0 +1,3 @@
+Status: NOT VERIFIED
+Reason: gitleaks tool is not installed in the local container environment (confirmed in P0.7).
+Recursive regex secret scan fallback was recorded in docs/qa/reports/secret-scan.txt with 0 pattern matches detected across docs/qa/.

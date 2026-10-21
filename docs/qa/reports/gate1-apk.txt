@@ -1,0 +1,4 @@
+File Name: Zilbio-latest.apk
+Size: 52M (54319918 bytes)
+SHA256: 9c21a9a39f071693db7dc056cc73a35d937a256529aadf20cd4e4c2f835b1dfe
+Release URL: https://github.com/engiincr/Zilbio-Chat/releases/tag/v3.0.4

@@ -48,6 +48,7 @@ class VadAudioChunker(
 
     var speakerId: String = ""
     var speakerName: String = ""
+    var speakerLanguage: String = "tr"
 
     fun start() {
         scope.launch {
@@ -57,15 +58,12 @@ class VadAudioChunker(
             var isSpeaking = false
             var chunkStartTime = 0L
             var lastSpeechTime = 0L
-            var sampleRate = 16000
-            var channelCount = 1
-
             for (chunk in pcmChannel) {
                 if (isPaused) {
                     continue
                 }
-                sampleRate = chunk.sampleRate
-                channelCount = chunk.channelCount
+                val sampleRate = chunk.sampleRate
+                val channelCount = chunk.channelCount
                 val bytesPerSec = sampleRate * channelCount * 2
                 val maxPreRollBytes = (bytesPerSec * 0.200).toInt() // 200ms
 
@@ -78,7 +76,7 @@ class VadAudioChunker(
                         _uiStatus.value = "Ses dinleniyor..."
                         // Flush pre-roll buffer into main buffer to preserve word onsets
                         while (!preRollBuffer.isEmpty()) {
-                            buffer.write(preRollBuffer.pollFirst()!!)
+                            preRollBuffer.pollFirst()?.let { buffer.write(it) }
                         }
                         preRollBytes = 0
                     }
@@ -110,13 +108,15 @@ class VadAudioChunker(
                             _uiStatus.value = "Çevriliyor..."
                             val wavBytes = prependWavHeader(pcmBytes, sampleRate, channelCount, 16)
                             val result = translationEngine.translateAudio(wavBytes, targetLanguage)
-                            if (result.translatedText.isNotBlank()) {
+                            val original = result.originalText.ifBlank { result.translatedText }
+                            val translated = result.translatedText.ifBlank { original }
+                            if (translated.isNotBlank()) {
                                 val segment = CallTranscriptSegment(
                                     speakerId = speakerId,
                                     speakerName = speakerName,
-                                    originalText = result.originalText,
-                                    translatedText = result.translatedText,
-                                    originalLanguage = result.sourceLanguage,
+                                    originalText = original,
+                                    translatedText = translated,
+                                    originalLanguage = result.sourceLanguage.ifBlank { speakerLanguage },
                                     timestamp = System.currentTimeMillis()
                                 )
                                 _transcriptSegments.emit(segment)
