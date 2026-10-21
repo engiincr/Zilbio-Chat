@@ -139,6 +139,7 @@ class AudioDeviceController(private val context: Context) : SensorEventListener 
         return list
     }
 
+    @Suppress("DEPRECATION")
     fun setAudioRoute(route: AudioOutputRoute) {
         Log.i(TAG, "Changing audio route to: $route")
         _currentRoute.value = route
@@ -160,6 +161,7 @@ class AudioDeviceController(private val context: Context) : SensorEventListener 
                         it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
                         it.type == AudioDeviceInfo.TYPE_BLE_HEADSET
                     }
+                    else -> null
                 }
                 if (targetDevice != null) {
                     audioManager.setCommunicationDevice(targetDevice)
@@ -207,7 +209,6 @@ class AudioDeviceController(private val context: Context) : SensorEventListener 
                         Log.w(TAG, "Bluetooth SCO start failed: ${e.message}")
                     }
                 }
-                @Suppress("DEPRECATION")
                 AudioOutputRoute.BLUETOOTH_OR_HEADSET -> {
                     enableProximitySensor(false)
                     if (_isBluetoothConnected.value) {
@@ -226,6 +227,7 @@ class AudioDeviceController(private val context: Context) : SensorEventListener 
                         } catch (e: Exception) {}
                     }
                 }
+                else -> {}
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error switching audio route: ${e.message}", e)
