@@ -1,6 +1,5 @@
 package com.android.zilbio.data.remote
 
-import android.content.Context
 import android.util.Base64
 import android.util.Log
 import android.util.LruCache
@@ -15,7 +14,7 @@ import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
 import com.android.zilbio.domain.model.TranslationResult
-import com.android.zilbio.util.ApiConfig
+import com.android.zilbio.config.ApiConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -57,7 +56,7 @@ object GeminiTranslationEngine {
     private val translators = ConcurrentHashMap<String, Translator>()
     private val mlKitReady = AtomicBoolean(false)
 
-    fun initMlKit(context: Context) {
+    fun initMlKit() {
         val pairs = listOf(
             "tr" to "en",
             "en" to "tr",

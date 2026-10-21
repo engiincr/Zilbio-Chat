@@ -49,10 +49,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CallMissed
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.CallMissed
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -73,10 +75,8 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.outlined.PushPin
@@ -202,7 +202,6 @@ fun ChatScreen(
     val messages = remember { mutableStateListOf<Message>() }
 
     var inputText by remember { mutableStateOf("") }
-    var isSending by remember { mutableStateOf(false) }
 
     // In-chat Search State
     var isSearching by remember { mutableStateOf(false) }
@@ -223,7 +222,6 @@ fun ChatScreen(
 
     // Bottom Sheets & Overlays
     var showAttachmentMenu by remember { mutableStateOf(false) }
-    var showEmojiStickerSheet by remember { mutableStateOf(false) }
     var selectedMessageForMenu by remember { mutableStateOf<Message?>(null) }
     var translationDetailMessage by remember { mutableStateOf<Message?>(null) }
 
@@ -247,16 +245,16 @@ fun ChatScreen(
 
     // Media file pickers
     val photoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) sendMediaAttachment(uri, "image", currentUser, friendUser, chatId, friendId, chatCustomization.disappearingDurationMs, context) { messages.add(it) }
+        if (uri != null) sendMediaAttachment(uri, "image", currentUser, chatId, friendId, chatCustomization.disappearingDurationMs, context) { messages.add(it) }
     }
     val documentPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) sendMediaAttachment(uri, "document", currentUser, friendUser, chatId, friendId, chatCustomization.disappearingDurationMs, context) { messages.add(it) }
+        if (uri != null) sendMediaAttachment(uri, "document", currentUser, chatId, friendId, chatCustomization.disappearingDurationMs, context) { messages.add(it) }
     }
     val videoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) sendMediaAttachment(uri, "video", currentUser, friendUser, chatId, friendId, chatCustomization.disappearingDurationMs, context) { messages.add(it) }
+        if (uri != null) sendMediaAttachment(uri, "video", currentUser, chatId, friendId, chatCustomization.disappearingDurationMs, context) { messages.add(it) }
     }
     val audioPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) sendMediaAttachment(uri, "audio", currentUser, friendUser, chatId, friendId, chatCustomization.disappearingDurationMs, context) { messages.add(it) }
+        if (uri != null) sendMediaAttachment(uri, "audio", currentUser, chatId, friendId, chatCustomization.disappearingDurationMs, context) { messages.add(it) }
     }
 
     // 1. Fetch friend details and initial messages
@@ -365,7 +363,7 @@ fun ChatScreen(
     val displayMessages = remember(messages.toList(), isSearching, searchQuery) {
         val now = System.currentTimeMillis()
         val nonExpired = messages.filter { msg ->
-            msg.expiresAt == null || msg.expiresAt!! > now
+            msg.expiresAt == null || (msg.expiresAt ?: 0L) > now
         }
         if (isSearching && searchQuery.isNotBlank()) {
             nonExpired.filter {
@@ -487,7 +485,7 @@ fun ChatScreen(
                                     val statusText = if (friendUser?.status == "online") {
                                         "Çevrimiçi"
                                     } else if ((friendUser?.lastSeen ?: 0L) > 0L) {
-                                        val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(friendUser!!.lastSeen))
+                                        val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(friendUser?.lastSeen ?: 0L))
                                         "Son çevrimiçi $timeStr"
                                     } else {
                                         "Çevrimdışı"
@@ -647,10 +645,8 @@ fun ChatScreen(
                                     message = msg,
                                     isOutgoing = isOutgoing,
                                     friendName = friendUser?.displayName ?: "Arkadaş",
-                                    friendAvatar = friendUser?.avatarBase64,
                                     friendIsAdmin = friendUser?.isOwnerOrAdmin() == true,
                                     myIsAdmin = currentUser?.isOwnerOrAdmin() == true,
-                                    currentUserId = myUserId,
                                     bubbleOutgoingColor = currentTheme.bubbleOutgoing,
                                     bubbleIncomingColor = currentTheme.bubbleIncoming,
                                     accentColor = currentTheme.accent,
@@ -672,7 +668,6 @@ fun ChatScreen(
                                             disappearingDurationMs = chatCustomization.disappearingDurationMs,
                                             context = context,
                                             onClear = { inputText = "" },
-                                            onSendState = { isSending = it },
                                             onMessageCreated = { messages.add(it) }
                                         )
                                     }
@@ -938,7 +933,7 @@ fun ChatScreen(
                                     .background(AccentNeonLime)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Send,
+                                    imageVector = Icons.AutoMirrored.Filled.Send,
                                     contentDescription = "Gönder",
                                     tint = BackgroundMidnightNavy,
                                     modifier = Modifier.size(18.dp)
@@ -1045,9 +1040,9 @@ fun ChatScreen(
                                 if (inputText.isNotBlank()) {
                                     IconButton(
                                         onClick = {
-                                            if (editingMessage != null) {
+                                            val editTarget = editingMessage
+                                            if (editTarget != null) {
                                                 // Save Edited Message
-                                                val editTarget = editingMessage!!
                                                 val newText = inputText.trim()
                                                 editingMessage = null
                                                 inputText = ""
@@ -1094,7 +1089,6 @@ fun ChatScreen(
                                                     replyTo = reply,
                                                     context = context,
                                                     onClear = { inputText = "" },
-                                                    onSendState = { isSending = it },
                                                     onMessageCreated = { messages.add(it) }
                                                 )
                                             }
@@ -1104,7 +1098,7 @@ fun ChatScreen(
                                             .clip(CircleShape)
                                             .background(AccentNeonLime)
                                     ) {
-                                        Icon(Icons.Default.Send, contentDescription = strings.send, tint = BackgroundMidnightNavy, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = strings.send, tint = BackgroundMidnightNavy, modifier = Modifier.size(18.dp))
                                     }
                                 } else {
                                     // Mic voice button with push-to-talk / handsfree drag
@@ -1225,7 +1219,7 @@ fun ChatScreen(
                         Column(modifier = Modifier.padding(vertical = 4.dp)) {
                             // Reply
                             ContextMenuActionRow(
-                                icon = Icons.Default.Reply,
+                                icon = Icons.AutoMirrored.Filled.Reply,
                                 text = strings.reply,
                                 onClick = {
                                     replyingToMessage = selectedMsg
@@ -1360,7 +1354,7 @@ fun ChatScreen(
                         }
                         AttachmentOptionItem(icon = Icons.Default.Person, label = strings.attachContact) {
                             showAttachmentMenu = false
-                            sendSimulatedContact(currentUser, friendUser, chatId, friendId, chatCustomization.disappearingDurationMs) { messages.add(it) }
+                            sendSimulatedContact(currentUser, chatId, friendId, chatCustomization.disappearingDurationMs) { messages.add(it) }
                         }
                         AttachmentOptionItem(icon = Icons.Default.Audiotrack, label = strings.attachAudio) {
                             showAttachmentMenu = false
@@ -1368,7 +1362,7 @@ fun ChatScreen(
                         }
                         AttachmentOptionItem(icon = Icons.Default.LocationOn, label = strings.attachLocation) {
                             showAttachmentMenu = false
-                            sendSimulatedLocation(currentUser, friendUser, chatId, friendId, chatCustomization.disappearingDurationMs) { messages.add(it) }
+                            sendSimulatedLocation(currentUser, chatId, friendId, chatCustomization.disappearingDurationMs) { messages.add(it) }
                         }
                     }
                     Spacer(modifier = Modifier.height(20.dp))
@@ -1408,7 +1402,7 @@ fun SwipeableMessageContainer(
     ) {
         if (offsetX > 15f) {
             Icon(
-                imageVector = Icons.Default.Reply,
+                imageVector = Icons.AutoMirrored.Filled.Reply,
                 contentDescription = "Yanıtla",
                 tint = AccentNeonLime.copy(alpha = (offsetX / maxSwipe).coerceIn(0.3f, 1f)),
                 modifier = Modifier
@@ -1487,10 +1481,8 @@ private fun MessageBubble(
     message: Message,
     isOutgoing: Boolean,
     friendName: String,
-    friendAvatar: String?,
     friendIsAdmin: Boolean = false,
     myIsAdmin: Boolean = false,
-    currentUserId: String,
     bubbleOutgoingColor: Color,
     bubbleIncomingColor: Color,
     accentColor: Color,
@@ -1967,7 +1959,7 @@ fun InChatCallLogContent(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (isMissed) Icons.Default.CallMissed else Icons.Default.Phone,
+                    imageVector = if (isMissed) Icons.AutoMirrored.Filled.CallMissed else Icons.Default.Phone,
                     contentDescription = null,
                     tint = if (isMissed) DestructiveCoralRed else OnlineStatusGreen,
                     modifier = Modifier.size(18.dp)
@@ -2023,7 +2015,6 @@ private fun sendMessage(
     replyTo: Message? = null,
     context: Context? = null,
     onClear: () -> Unit,
-    onSendState: (Boolean) -> Unit,
     onMessageCreated: (Message) -> Unit
 ) {
     val clean = text.trim()
@@ -2156,7 +2147,6 @@ private fun sendMediaAttachment(
     uri: Uri,
     type: String,
     currentUser: User?,
-    friendUser: Friend?,
     chatId: String,
     friendId: String,
     disappearingDurationMs: Long = 0L,
@@ -2201,7 +2191,6 @@ private fun sendMediaAttachment(
 
 private fun sendSimulatedContact(
     currentUser: User?,
-    friendUser: Friend?,
     chatId: String,
     friendId: String,
     disappearingDurationMs: Long = 0L,
@@ -2241,7 +2230,6 @@ private fun sendSimulatedContact(
 
 private fun sendSimulatedLocation(
     currentUser: User?,
-    friendUser: Friend?,
     chatId: String,
     friendId: String,
     disappearingDurationMs: Long = 0L,

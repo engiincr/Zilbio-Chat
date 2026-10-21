@@ -11,7 +11,7 @@ class ZilbioApp : Application() {
 
         // Initialize ML Kit translation models for TR, EN, DE
         try {
-            GeminiTranslationEngine.initMlKit(this)
+            GeminiTranslationEngine.initMlKit()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize ML Kit translation models at startup", e)
         }

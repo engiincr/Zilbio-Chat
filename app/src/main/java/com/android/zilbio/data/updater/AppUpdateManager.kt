@@ -12,7 +12,7 @@ import com.android.zilbio.BuildConfig
 import com.android.zilbio.data.local.UserPreferences
 import com.android.zilbio.data.remote.CloudRealtimeService
 import com.android.zilbio.service.ZilbioNotificationService
-import com.android.zilbio.util.ApiConfig
+import com.android.zilbio.config.ApiConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -231,7 +231,7 @@ object AppUpdateManager {
                 if (resp.isSuccessful) {
                     val raw = resp.body?.string() ?: ""
                     val json = JSONObject(raw)
-                    val tagName = json.optString("tag_name", "v3.0.2")
+                    val tagName = json.optString("tag_name", "v3.0.3")
                     val bodyNotes = json.optString("body", "")
                     val assets = json.optJSONArray("assets")
 

@@ -96,7 +96,6 @@ import java.util.Locale
 @Composable
 fun ChatListScreen(
     navController: NavController? = null,
-    onNavigateBack: () -> Unit = { navController?.popBackStack() },
     onNavigateToChat: (friendId: String) -> Unit = { friendId -> navController?.navigate("chat/$friendId") },
     onNavigateToFriends: () -> Unit = { navController?.navigate("friends") }
 ) {

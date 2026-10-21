@@ -27,7 +27,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.People
@@ -82,10 +82,7 @@ fun HomeScreen(
     navController: NavController? = null,
     onNavigateToChatList: () -> Unit = { navController?.navigate("chatList") },
     onNavigateToFriends: () -> Unit = { navController?.navigate("friends") },
-    onNavigateToSettings: () -> Unit = { navController?.navigate("settings") },
-    onNavigateToIncomingCall: (callId: String, callerId: String) -> Unit = { callId, callerId ->
-        navController?.navigate("incomingCall/$callId/$callerId")
-    }
+    onNavigateToSettings: () -> Unit = { navController?.navigate("settings") }
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -286,7 +283,7 @@ fun HomeScreen(
                     QuickActionCard(
                         title = "Sohbetler",
                         subtitle = "Mesajlaşma ve ses",
-                        icon = Icons.Default.Chat,
+                        icon = Icons.AutoMirrored.Filled.Chat,
                         onClick = onNavigateToChatList
                     )
                 }

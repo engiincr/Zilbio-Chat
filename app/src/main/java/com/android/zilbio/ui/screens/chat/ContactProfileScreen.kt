@@ -260,7 +260,7 @@ fun ContactProfileScreen(
             val statusText = if (contactUser?.status == "online") {
                 "Çevrimiçi"
             } else if ((contactUser?.lastSeen ?: 0L) > 0L) {
-                val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(contactUser!!.lastSeen))
+                val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(contactUser?.lastSeen ?: 0L))
                 "Son çevrimiçi $timeStr"
             } else {
                 "Çevrimdışı"

@@ -10,7 +10,7 @@ import java.io.File
 object GitHubAutoUpdater {
     const val GITHUB_REPO_URL = "https://github.com/engiincr/Zilbio-Chat"
     const val GITHUB_MAIN_ZIP_URL = "https://github.com/engiincr/Zilbio-Chat/archive/refs/heads/main.zip"
-    const val DEFAULT_VERSION_NAME = "V3.0.2"
+    const val DEFAULT_VERSION_NAME = "V3.0.3"
 
     val updateState: StateFlow<UpdateState> get() = AppUpdateManager.updateState
     val isDownloading: StateFlow<Boolean> get() = AppUpdateManager.isDownloading
@@ -23,9 +23,9 @@ object GitHubAutoUpdater {
     fun startDownload(context: Context, downloadUrl: String? = null, latestSha: String = "") {
         val manifest = AppUpdateManager.latestManifest.value ?: UpdateManifest(
             versionCode = 4,
-            versionName = "3.0.2",
+            versionName = "3.0.3",
             commitSha = latestSha,
-            downloadUrl = downloadUrl ?: "https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.2/Zilbio-latest.apk"
+            downloadUrl = downloadUrl ?: "https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.3/Zilbio-latest.apk"
         )
         AppUpdateManager.startDownload(context, manifest)
     }

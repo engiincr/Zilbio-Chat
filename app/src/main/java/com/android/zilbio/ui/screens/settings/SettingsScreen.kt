@@ -28,7 +28,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
@@ -105,7 +105,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     navController: NavController? = null,
-    onNavigateBack: () -> Unit = { navController?.popBackStack() },
     onLogout: () -> Unit = {
         navController?.navigate("auth") {
             popUpTo(0) { inclusive = true }
@@ -945,7 +944,7 @@ fun SettingsScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.Logout,
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
                         contentDescription = strings.logout,
                         tint = CallEndCoralRed,
                         modifier = Modifier.size(18.dp)

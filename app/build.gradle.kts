@@ -25,7 +25,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 4
-        versionName = "3.0.2"
+        versionName = "3.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -34,7 +34,7 @@ android {
 
         listOf("CLOUD_DB_URL", "GEMINI_API_KEY", "GEMINI_API_KEY2", "TURN_USERNAME", "TURN_PASSWORD")
             .forEach { buildConfigField("String", it, secret(it).quoted()) }
-        buildConfigField("String", "BUILD_COMMIT_SHA", (System.getenv("GITHUB_SHA") ?: "v3.0.2-release").quoted())
+        buildConfigField("String", "BUILD_COMMIT_SHA", (System.getenv("GITHUB_SHA") ?: "v3.0.3-release").quoted())
     }
 
     signingConfigs {

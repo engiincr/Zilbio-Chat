@@ -18,10 +18,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CallMade
+import androidx.compose.material.icons.automirrored.filled.CallMissed
+import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.CallMade
-import androidx.compose.material.icons.filled.CallMissed
-import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -38,7 +38,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,7 +61,6 @@ import com.android.zilbio.ui.theme.OnlineStatusGreen
 import com.android.zilbio.ui.theme.SurfaceDarkWarm
 import com.android.zilbio.ui.theme.TextMutedWarmGrey
 import com.android.zilbio.ui.theme.TextOffWhite
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,7 +70,6 @@ import java.util.Locale
 fun CallsScreen(navController: NavController) {
     val context = LocalContext.current
     val strings = LocalAppStrings.current
-    val scope = rememberCoroutineScope()
 
     var callLogs by remember { mutableStateOf<List<CallHistoryItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -212,9 +209,9 @@ fun CallHistoryRow(
                 contentAlignment = Alignment.Center
             ) {
                 val icon = when {
-                    isMissed -> Icons.Default.CallMissed
-                    item.isIncoming -> Icons.Default.CallReceived
-                    else -> Icons.Default.CallMade
+                    isMissed -> Icons.AutoMirrored.Filled.CallMissed
+                    item.isIncoming -> Icons.AutoMirrored.Filled.CallReceived
+                    else -> Icons.AutoMirrored.Filled.CallMade
                 }
                 val iconTint = if (isMissed) DestructiveCoralRed else OnlineStatusGreen
                 Icon(

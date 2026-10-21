@@ -15,7 +15,7 @@ import com.android.zilbio.domain.model.FriendRequest
 import com.android.zilbio.domain.model.Message
 import com.android.zilbio.domain.model.PrivacySettings
 import com.android.zilbio.domain.model.User
-import com.android.zilbio.util.ApiConfig
+import com.android.zilbio.config.ApiConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Call
@@ -371,8 +371,8 @@ object CloudRealtimeService {
             val putMyFriend = putJson("friends/$myUserId/$friendUserId", myFriendJson)
             val putTheirFriend = putJson("friends/$friendUserId/$myUserId", theirFriendJson)
 
-            val delIncoming = deleteJson("friend_requests/$myUserId/$friendUserId")
-            val delSent = deleteJson("sent_requests/$friendUserId/$myUserId")
+            deleteJson("friend_requests/$myUserId/$friendUserId")
+            deleteJson("sent_requests/$friendUserId/$myUserId")
 
             // Ensure chat membership node exists for security rules
             val chatId = generateChatId(myUserId, friendUserId)

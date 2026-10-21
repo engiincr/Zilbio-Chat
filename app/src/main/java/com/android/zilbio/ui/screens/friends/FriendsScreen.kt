@@ -22,10 +22,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -172,7 +172,7 @@ fun FriendsScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Geri",
                             tint = TextPrimaryEspresso
                         )
@@ -390,7 +390,7 @@ fun FriendsScreen(
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Chat, contentDescription = null, tint = AccentAmberOrange)
+                            Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, tint = AccentAmberOrange)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Sohbet Aç", color = AccentAmberOrange, fontWeight = FontWeight.Bold)
                         }
@@ -424,8 +424,8 @@ fun FriendsScreen(
     }
 
     // Confirmation dialog for removing friend
-    if (showDeleteConfirmDialog && selectedFriendForOptions != null) {
-        val friendToDelete = selectedFriendForOptions!!
+    val friendToDelete = selectedFriendForOptions
+    if (showDeleteConfirmDialog && friendToDelete != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
             title = { Text("Arkadaşı Kaldır", fontWeight = FontWeight.Bold, color = TextPrimaryEspresso) },

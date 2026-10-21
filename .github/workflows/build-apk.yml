@@ -12,12 +12,37 @@ permissions:
 
 jobs:
   build:
-    name: Assemble Debug APK & Publish OTA Release
+    name: Assemble APK & Publish OTA Release
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Validate Required Secrets
+        run: |
+          MISSING_SECRETS=()
+          [ -z "${{ secrets.CLOUD_DB_URL }}" ] && MISSING_SECRETS+=("CLOUD_DB_URL")
+          [ -z "${{ secrets.GEMINI_API_KEY }}" ] && MISSING_SECRETS+=("GEMINI_API_KEY")
+          [ -z "${{ secrets.GEMINI_API_KEY2 }}" ] && MISSING_SECRETS+=("GEMINI_API_KEY2")
+          [ -z "${{ secrets.TURN_USERNAME }}" ] && MISSING_SECRETS+=("TURN_USERNAME")
+          [ -z "${{ secrets.TURN_PASSWORD }}" ] && MISSING_SECRETS+=("TURN_PASSWORD")
+          [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ] && MISSING_SECRETS+=("GOOGLE_SERVICES_JSON")
+          
+          if [ ${#MISSING_SECRETS[@]} -ne 0 ]; then
+            echo "❌ Error: The following required secrets are missing or empty:"
+            for secret in "${MISSING_SECRETS[@]}"; do
+              echo "  - $secret"
+            done
+            exit 1
+          fi
+          echo "✅ All required secrets are verified and present."
+
+      - name: Write google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
 
       - name: Clean Conflicting Duplicate Resources
         run: |
@@ -39,12 +64,6 @@ jobs:
         run: |
           gradle wrapper --gradle-version 8.5 --distribution-type bin --no-daemon
           chmod +x ./gradlew || true
-
-      - name: Restore google-services.json
-        if: env.GOOGLE_SERVICES_JSON != ''
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
 
       - name: Setup Release Keystore
         env:
@@ -74,7 +93,7 @@ jobs:
           grep -A 10 "Variant: release" release_assets/signing_report.txt | head -n 12 >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-      - name: Build Signed APK with Gradle
+      - name: Build APK with Gradle
         env:
           CLOUD_DB_URL: ${{ secrets.CLOUD_DB_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -96,7 +115,6 @@ jobs:
       - name: Prepare Release Assets for OTA
         run: |
           mkdir -p release_assets
-          # Locate built APK (release or debug)
           APK_PATH=$(find app/build/outputs/apk -name "*.apk" | grep -v "androidTest" | head -n 1)
           if [ -z "$APK_PATH" ]; then
             echo "Error: No APK found after build!"
@@ -104,42 +122,38 @@ jobs:
           fi
           echo "Found built APK: $APK_PATH"
           cp "$APK_PATH" release_assets/Zilbio-latest.apk
-          cp "$APK_PATH" release_assets/TransLive-latest.apk
           echo "${{ github.sha }}" > release_assets/commit_sha.txt
           
-          # Generate SHA256 checksums
+          # Generate SHA256 checksum
           cd release_assets
           sha256sum Zilbio-latest.apk > Zilbio-latest.apk.sha256
-          sha256sum TransLive-latest.apk > TransLive-latest.apk.sha256
           cd ..
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Zilbio-v3.0.2-apk
+          name: Zilbio-v3.0.3-apk
           path: release_assets/
           if-no-files-found: error
 
-      - name: Publish Rolling GitHub Release (v3.0.2 & latest)
+      - name: Publish Rolling GitHub Release (v3.0.3 & latest)
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v3.0.2
-          name: "Zilbio V3.0.2 (Guaranteed Two-Way Voice & Instant Sync)"
+          tag_name: v3.0.3
+          name: "Zilbio V3.0.3 (Guaranteed Voice & Studio Audio)"
           body: |
-            ## Zilbio V3.0.2 — Official Production Release
-            - **Target:** Production Signed APK
+            ## Zilbio V3.0.3 — Production Release
+            - **Target:** Production APK
             - **Commit SHA:** `${{ github.sha }}`
-            - **Version:** `3.0.2` (versionCode 4)
-            - **Key Upgrades:** Guaranteed Two-Way Voice, WebRTC software AEC3/NS, Voice Delivery Watchdog, Instant In-Memory UI Caches, Material 3 DatePickerDialog, Atomic Multi-path Username Updates.
-            - **Direct Download:** `https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.2/Zilbio-latest.apk`
+            - **Version:** `3.0.3` (versionCode 4)
+            - **Key Upgrades:** Modernized audio routing with API 31+ CommunicationDevice, full AutoMirrored icons, zero warnings, resilient multi-region SSE sync.
+            - **Direct Download:** `https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.3/Zilbio-latest.apk`
           prerelease: false
           draft: false
           files: |
             release_assets/Zilbio-latest.apk
-            release_assets/TransLive-latest.apk
             release_assets/Zilbio-latest.apk.sha256
-            release_assets/TransLive-latest.apk.sha256
             release_assets/commit_sha.txt
             release_assets/signing_report.txt
         env:
@@ -151,6 +165,13 @@ jobs:
           CLOUD_DB_URL: ${{ secrets.CLOUD_DB_URL }}
         run: |
           SHA=$(cat release_assets/Zilbio-latest.apk.sha256 | awk '{print $1}')
-          JSON_PAYLOAD="{\"versionCode\":4,\"versionName\":\"3.0.2\",\"commitSha\":\"${{ github.sha }}\",\"sha256\":\"$SHA\",\"downloadUrl\":\"https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.2/Zilbio-latest.apk\",\"mandatory\":false,\"updatedAt\":$(date +%s000)}"
+          JSON_PAYLOAD="{\"versionCode\":4,\"versionName\":\"3.0.3\",\"commitSha\":\"${{ github.sha }}\",\"sha256\":\"$SHA\",\"downloadUrl\":\"https://github.com/engiincr/Zilbio-Chat/releases/download/v3.0.3/Zilbio-latest.apk\",\"mandatory\":false,\"updatedAt\":$(date +%s000)}"
           curl -s -X PUT -H "Content-Type: application/json" -d "$JSON_PAYLOAD" "${CLOUD_DB_URL}/app_updates/latest.json" || true
           echo "OTA signal dispatched to Firebase"
+
+      - name: Clean Sensitive Credentials
+        if: always()
+        run: |
+          rm -f app/google-services.json
+          rm -f zilbio.jks
+          echo "Cleaned google-services.json and keystore credentials."

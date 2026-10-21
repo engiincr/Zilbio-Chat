@@ -6,7 +6,7 @@ import android.media.MediaRecorder
 import android.util.Log
 import com.android.zilbio.domain.model.AudioOutputRoute
 import com.android.zilbio.domain.model.NetworkQuality
-import com.android.zilbio.util.ApiConfig
+import com.android.zilbio.config.ApiConfig
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -314,7 +314,7 @@ class SharedAudioCallEngine(private val context: Context) {
             if (frontCamera != null) {
                 videoCapturer = enumerator.createCapturer(frontCamera, null)
                 surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", rootEglBase?.eglBaseContext)
-                videoSource = peerConnectionFactory?.createVideoSource(videoCapturer!!.isScreencast)
+                videoSource = peerConnectionFactory?.createVideoSource(videoCapturer?.isScreencast ?: false)
 
                 videoCapturer?.initialize(surfaceTextureHelper, context, videoSource?.capturerObserver)
                 videoCapturer?.startCapture(640, 480, 30)

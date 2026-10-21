@@ -42,7 +42,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -782,10 +782,10 @@ fun CallScreen(
                     ) {
                         val routeIcon = when (currentAudioRoute) {
                             AudioOutputRoute.EARPIECE -> Icons.Default.Hearing
-                            AudioOutputRoute.SPEAKER -> Icons.Default.VolumeUp
+                            AudioOutputRoute.SPEAKER -> Icons.AutoMirrored.Filled.VolumeUp
                             AudioOutputRoute.WIRED_HEADSET -> Icons.Default.Headphones
                             AudioOutputRoute.BLUETOOTH -> Icons.Default.Bluetooth
-                            else -> Icons.Default.VolumeUp
+                            else -> Icons.AutoMirrored.Filled.VolumeUp
                         }
                         Icon(
                             imageVector = routeIcon,
@@ -937,10 +937,10 @@ fun CallScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             val icon = when (dev.route) {
                                 AudioOutputRoute.EARPIECE -> Icons.Default.Hearing
-                                AudioOutputRoute.SPEAKER -> Icons.Default.VolumeUp
+                                AudioOutputRoute.SPEAKER -> Icons.AutoMirrored.Filled.VolumeUp
                                 AudioOutputRoute.WIRED_HEADSET -> Icons.Default.Headphones
                                 AudioOutputRoute.BLUETOOTH -> Icons.Default.Bluetooth
-                                else -> Icons.Default.VolumeUp
+                                else -> Icons.AutoMirrored.Filled.VolumeUp
                             }
                             Icon(
                                 imageVector = icon,

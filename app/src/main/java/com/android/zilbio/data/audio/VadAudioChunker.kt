@@ -57,15 +57,12 @@ class VadAudioChunker(
             var isSpeaking = false
             var chunkStartTime = 0L
             var lastSpeechTime = 0L
-            var sampleRate = 16000
-            var channelCount = 1
-
             for (chunk in pcmChannel) {
                 if (isPaused) {
                     continue
                 }
-                sampleRate = chunk.sampleRate
-                channelCount = chunk.channelCount
+                val sampleRate = chunk.sampleRate
+                val channelCount = chunk.channelCount
                 val bytesPerSec = sampleRate * channelCount * 2
                 val maxPreRollBytes = (bytesPerSec * 0.200).toInt() // 200ms
 
@@ -78,7 +75,7 @@ class VadAudioChunker(
                         _uiStatus.value = "Ses dinleniyor..."
                         // Flush pre-roll buffer into main buffer to preserve word onsets
                         while (!preRollBuffer.isEmpty()) {
-                            buffer.write(preRollBuffer.pollFirst()!!)
+                            preRollBuffer.pollFirst()?.let { buffer.write(it) }
                         }
                         preRollBytes = 0
                     }
