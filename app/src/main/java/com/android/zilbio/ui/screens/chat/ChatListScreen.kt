@@ -410,6 +410,42 @@ fun ChatListScreen(
                         }
                     }
 
+                    if (displayFriends.isEmpty() && searchQuery.isNotBlank()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 40.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = TextMutedSlateGrey,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        text = "Sonuç bulunamadı",
+                                        color = TextOffWhite,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "\"$searchQuery\" ile eşleşen sohbet bulunamadı.",
+                                        color = TextMutedSlateGrey,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     items(displayFriends, key = { it.userId }) { friend ->
                         val chatId = CloudRealtimeService.generateChatId(myUserId, friend.userId)
                         val isPinned = pinnedChats.contains(chatId)

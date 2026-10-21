@@ -59,7 +59,7 @@ object CloudRealtimeService {
     val gson = Gson()
     private val baseUrl = ApiConfig.CLOUD_DB_URL
 
-    inline fun <reified T> parseFirebaseList(json: String?): List<T> {
+    fun <T> parseFirebaseList(json: String?, clazz: Class<T>): List<T> {
         if (json.isNullOrBlank() || json.trim() == "null") return emptyList()
         val list = mutableListOf<T>()
         try {
@@ -69,7 +69,7 @@ object CloudRealtimeService {
                 for ((key, value) in obj.entrySet()) {
                     if (value == null || value.isJsonNull) continue
                     try {
-                        val parsed = gson.fromJson(value, T::class.java)
+                        val parsed = gson.fromJson(value, clazz)
                         if (parsed != null) {
                             val adjusted = when (parsed) {
                                 is User -> if (parsed.userId.isEmpty()) parsed.copy(userId = key) else parsed
@@ -90,7 +90,7 @@ object CloudRealtimeService {
                 for (elem in arr) {
                     if (elem == null || elem.isJsonNull) continue
                     try {
-                        val parsed = gson.fromJson(elem, T::class.java)
+                        val parsed = gson.fromJson(elem, clazz)
                         if (parsed != null) {
                             list.add(parsed)
                         }
@@ -104,6 +104,9 @@ object CloudRealtimeService {
         }
         return list
     }
+
+    inline fun <reified T> parseFirebaseList(json: String?): List<T> =
+        parseFirebaseList(json, T::class.java)
 
     // ---- USER OPERATIONS ----
 
@@ -396,7 +399,7 @@ object CloudRealtimeService {
     suspend fun getIncomingRequests(userId: String): List<FriendRequest> {
         return try {
             val json = getJson("friend_requests/$userId") ?: return emptyList()
-            parseFirebaseList<FriendRequest>(json)
+            parseFirebaseList(json, FriendRequest::class.java)
         } catch (e: Exception) {
             Log.e(TAG, "getIncomingRequests failed: ${e.message}", e)
             emptyList()
@@ -406,7 +409,7 @@ object CloudRealtimeService {
     suspend fun getSentRequests(userId: String): List<FriendRequest> {
         return try {
             val json = getJson("sent_requests/$userId") ?: return emptyList()
-            parseFirebaseList<FriendRequest>(json)
+            parseFirebaseList(json, FriendRequest::class.java)
         } catch (e: Exception) {
             Log.e(TAG, "getSentRequests failed: ${e.message}", e)
             emptyList()
@@ -416,7 +419,7 @@ object CloudRealtimeService {
     suspend fun getFriends(userId: String): List<Friend> {
         return try {
             val json = getJson("friends/$userId") ?: return emptyList()
-            parseFirebaseList<Friend>(json)
+            parseFirebaseList(json, Friend::class.java)
         } catch (e: Exception) {
             Log.e(TAG, "getFriends failed: ${e.message}", e)
             emptyList()
@@ -611,7 +614,7 @@ object CloudRealtimeService {
     suspend fun getMessages(chatId: String): List<Message> {
         return try {
             val json = getJson("messages/$chatId") ?: return emptyList()
-            parseFirebaseList<Message>(json).sortedBy { it.timestamp }
+            parseFirebaseList(json, Message::class.java).sortedBy { it.timestamp }
         } catch (e: Exception) {
             Log.e(TAG, "getMessages failed: ${e.message}", e)
             emptyList()
@@ -646,7 +649,7 @@ object CloudRealtimeService {
     suspend fun getActiveSessions(userId: String): List<DeviceSession> {
         return try {
             val json = getJson("device_sessions/$userId") ?: return emptyList()
-            parseFirebaseList<DeviceSession>(json)
+            parseFirebaseList(json, DeviceSession::class.java)
         } catch (e: Exception) {
             Log.e(TAG, "getActiveSessions failed: ${e.message}", e)
             emptyList()
@@ -667,7 +670,7 @@ object CloudRealtimeService {
     suspend fun getAllUsers(): List<User> {
         return try {
             val json = getJson("users") ?: return emptyList()
-            parseFirebaseList<User>(json)
+            parseFirebaseList(json, User::class.java)
         } catch (e: Exception) {
             Log.e(TAG, "getAllUsers failed: ${e.message}", e)
             emptyList()
