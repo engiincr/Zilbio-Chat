@@ -6,6 +6,7 @@ import com.android.zilbio.data.local.UserPreferences
 import com.android.zilbio.data.remote.CloudRealtimeService
 import com.android.zilbio.domain.model.CallHistoryItem
 import com.android.zilbio.domain.model.CallSession
+import com.android.zilbio.domain.model.Friend
 import com.android.zilbio.domain.model.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

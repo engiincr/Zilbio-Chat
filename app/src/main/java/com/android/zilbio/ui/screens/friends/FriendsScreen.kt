@@ -127,6 +127,7 @@ fun FriendsScreen(
                 isLoading = true
                 try {
                     friendsList = CloudRealtimeService.getFriends(uid)
+                    com.android.zilbio.service.GlobalRealtimeSyncManager.friendsFlow.value = friendsList
                     incomingList = CloudRealtimeService.getIncomingRequests(uid)
                     sentList = CloudRealtimeService.getSentRequests(uid)
                 } catch (e: Exception) {
@@ -420,7 +421,7 @@ fun FriendsScreen(
                         val uid = currentUser?.userId
                         if (!uid.isNullOrEmpty()) {
                             coroutineScope.launch {
-                                CloudRealtimeService.declineFriendRequest(uid, friendToDelete.userId)
+                                CloudRealtimeService.removeFriend(uid, friendToDelete.userId)
                                 showDeleteConfirmDialog = false
                                 selectedFriendForOptions = null
                                 refreshData()

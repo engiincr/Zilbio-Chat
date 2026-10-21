@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.android.zilbio.dataStore
 import com.android.zilbio.domain.model.ChatCustomization
@@ -46,7 +47,8 @@ object UserPreferences {
     val KEY_APP_THEME_MODE = stringPreferencesKey("app_theme_mode") // "SYSTEM", "DARK", "LIGHT"
     val KEY_PINNED_CHATS = stringPreferencesKey("pinned_chats") // Comma-separated chatIds
     val KEY_INSTALLED_COMMIT_SHA = stringPreferencesKey("installed_commit_sha")
-    val KEY_LAST_UPDATE_CHECK_TIME = stringPreferencesKey("last_update_check_time")
+    val KEY_LAST_UPDATE_CHECK_TIME = longPreferencesKey("last_update_check_time")
+    val KEY_LAST_NOTIFIED_VERSION_CODE = intPreferencesKey("last_notified_version_code")
 
     fun getUser(context: Context): Flow<User?> {
         return context.dataStore.data
@@ -230,6 +232,26 @@ object UserPreferences {
     suspend fun setInstalledCommitSha(context: Context, sha: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_INSTALLED_COMMIT_SHA] = sha
+        }
+    }
+
+    fun getLastNotifiedVersionCode(context: Context): Flow<Int> {
+        return context.dataStore.data.map { it[KEY_LAST_NOTIFIED_VERSION_CODE] ?: 0 }
+    }
+
+    suspend fun setLastNotifiedVersionCode(context: Context, versionCode: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_LAST_NOTIFIED_VERSION_CODE] = versionCode
+        }
+    }
+
+    fun getLastUpdateCheckTime(context: Context): Flow<Long> {
+        return context.dataStore.data.map { it[KEY_LAST_UPDATE_CHECK_TIME] ?: 0L }
+    }
+
+    suspend fun setLastUpdateCheckTime(context: Context, time: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_LAST_UPDATE_CHECK_TIME] = time
         }
     }
 

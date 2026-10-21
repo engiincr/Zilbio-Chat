@@ -33,9 +33,11 @@ object ZilbioNotificationService {
 
     const val CHANNEL_MESSAGES = "zilbio_messages_channel"
     const val CHANNEL_CALLS = "zilbio_calls_channel"
+    const val CHANNEL_UPDATES = "zilbio_updates_channel"
 
     private const val CALL_NOTIFICATION_ID = 2001
     private const val MESSAGE_BASE_NOTIFICATION_ID = 3000
+    private const val UPDATE_NOTIFICATION_ID = 4001
 
     private var activeRingtone: Ringtone? = null
     private var callTimeoutJob: Job? = null
@@ -78,7 +80,66 @@ object ZilbioNotificationService {
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             notificationManager.createNotificationChannel(callChannel)
+
+            // Application Updates Channel (Item #4 & #8)
+            val updateChannel = NotificationChannel(
+                CHANNEL_UPDATES,
+                "Zilbio Güncellemeler",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Yeni sürüm ve güncelleme bildirimleri"
+                setShowBadge(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            notificationManager.createNotificationChannel(updateChannel)
         }
+    }
+
+    fun showUpdateNotification(
+        context: Context,
+        versionName: String,
+        versionCode: Int,
+        releaseNotes: String? = null
+    ) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        initChannels(context)
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("navigate_to_settings", true)
+            putExtra("update_version_code", versionCode)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            UPDATE_NOTIFICATION_ID,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = "Zilbio güncellemesi mevcut"
+        val content = if (releaseNotes.isNullOrBlank()) {
+            "Yeni bir sürüm yayınlandı (v$versionName). Güncellemeyi indirmek için dokunun."
+        } else {
+            "v$versionName yayınlandı: $releaseNotes"
+        }
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_UPDATES)
+            .setSmallIcon(R.drawable.ic_notification_zilbio)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        notificationManager.notify(UPDATE_NOTIFICATION_ID, notification)
+        Log.i(TAG, "Update notification displayed for v$versionName (code $versionCode)")
+    }
+
+    fun clearUpdateNotification(context: Context) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(UPDATE_NOTIFICATION_ID)
     }
 
     fun showMessageNotification(

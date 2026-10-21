@@ -375,6 +375,18 @@ object CloudRealtimeService {
         }
     }
 
+    suspend fun removeFriend(myUserId: String, friendUserId: String): Boolean {
+        return try {
+            val delMy = deleteJson("friends/$myUserId/$friendUserId")
+            val delTheir = deleteJson("friends/$friendUserId/$myUserId")
+            Log.i(TAG, "removeFriend completed between $myUserId and $friendUserId (my: $delMy, their: $delTheir)")
+            delMy && delTheir
+        } catch (e: Exception) {
+            Log.e(TAG, "removeFriend failed: ${e.message}", e)
+            false
+        }
+    }
+
     // ---- MESSAGE OPERATIONS ----
 
     suspend fun sendMessage(chatId: String, message: Message): Boolean {
@@ -1267,6 +1279,10 @@ object CloudRealtimeService {
             Log.e(TAG, "patchJson failed for $path: ${e.message}")
             false
         }
+    }
+
+    suspend fun getAppUpdateManifest(): String? {
+        return getJson("app_updates/latest")
     }
 
     private suspend fun getJson(path: String): String? = withContext(Dispatchers.IO) {

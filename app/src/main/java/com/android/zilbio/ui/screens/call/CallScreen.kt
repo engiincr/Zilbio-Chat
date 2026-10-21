@@ -781,7 +781,7 @@ fun CallScreen(
                             .background(SurfaceMidnightDark)
                     ) {
                         val routeIcon = when (currentAudioRoute) {
-                            AudioOutputRoute.EARPIECE -> Icons.Default.PhoneInTalk
+                            AudioOutputRoute.EARPIECE -> Icons.Default.Hearing
                             AudioOutputRoute.SPEAKER -> Icons.Default.VolumeUp
                             AudioOutputRoute.WIRED_HEADSET -> Icons.Default.Headphones
                             AudioOutputRoute.BLUETOOTH -> Icons.Default.Bluetooth
@@ -936,7 +936,7 @@ fun CallScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             val icon = when (dev.route) {
-                                AudioOutputRoute.EARPIECE -> Icons.Default.PhoneInTalk
+                                AudioOutputRoute.EARPIECE -> Icons.Default.Hearing
                                 AudioOutputRoute.SPEAKER -> Icons.Default.VolumeUp
                                 AudioOutputRoute.WIRED_HEADSET -> Icons.Default.Headphones
                                 AudioOutputRoute.BLUETOOTH -> Icons.Default.Bluetooth

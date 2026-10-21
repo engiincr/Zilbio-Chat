@@ -180,6 +180,21 @@
         ".read": true,
         ".write": true
       }
+    },
+    "app_updates": {
+      "latest": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.hasChildren(['versionCode', 'versionName', 'downloadUrl'])",
+        "versionCode": { ".validate": "newData.isNumber()" },
+        "versionName": { ".validate": "newData.isString()" },
+        "commitSha": { ".validate": "newData.isString()" },
+        "downloadUrl": { ".validate": "newData.isString()" },
+        "sha256": { ".validate": "newData.isString()" },
+        "releaseNotes": { ".validate": "newData.isString()" },
+        "mandatory": { ".validate": "newData.isBoolean()" },
+        "updatedAt": { ".validate": "newData.isNumber()" }
+      }
     }
   }
 }
