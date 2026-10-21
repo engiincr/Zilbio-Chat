@@ -134,16 +134,26 @@ fun AdminPanelScreen(
         }
     }
 
+    val filteredUsers = remember(usersList, searchQuery) {
+        val q = searchQuery.trim().lowercase()
+        if (q.isEmpty()) {
+            usersList
+        } else {
+            usersList.filter {
+                it.username.lowercase().contains(q) ||
+                it.displayName.lowercase().contains(q) ||
+                it.userId.lowercase().contains(q)
+            }
+        }
+    }
+
     if (isCheckingAuth) {
         Scaffold(containerColor = BackgroundMidnightNavy) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AccentNeonLime)
             }
         }
-        return
-    }
-
-    if (!isAuthorized) {
+    } else if (!isAuthorized) {
         Scaffold(
             containerColor = BackgroundMidnightNavy
         ) { padding ->
@@ -192,24 +202,9 @@ fun AdminPanelScreen(
                 }
             }
         }
-        return
-    }
-
-    val filteredUsers = remember(usersList, searchQuery) {
-        val q = searchQuery.trim().lowercase()
-        if (q.isEmpty()) {
-            usersList
-        } else {
-            usersList.filter {
-                it.username.lowercase().contains(q) ||
-                it.displayName.lowercase().contains(q) ||
-                it.userId.lowercase().contains(q)
-            }
-        }
-    }
-
-    Scaffold(
-        containerColor = BackgroundMidnightNavy,
+    } else {
+        Scaffold(
+            containerColor = BackgroundMidnightNavy,
         topBar = {
             TopAppBar(
                 title = {
@@ -339,6 +334,7 @@ fun AdminPanelScreen(
                 }
             }
         }
+    }
     }
 }
 

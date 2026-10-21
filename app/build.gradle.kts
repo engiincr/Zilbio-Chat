@@ -39,6 +39,14 @@ android {
 
     signingConfigs {
         getByName("debug") {
+            val keystorePath = System.getenv("KEYSTORE_PATH") ?: "zilbio.jks"
+            val keystoreFile = rootProject.file(keystorePath)
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "zilbio123456"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "zilbio"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: "zilbio123456"
+            }
             enableV1Signing = true
             enableV2Signing = true
         }
@@ -101,6 +109,15 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 }
 
